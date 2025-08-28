@@ -1,0 +1,20 @@
+
+spring:
+  datasource:
+    url: jdbc:mysql://cfl401areco.edu.ar:3306/frcv?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+    username: frcv
+    password: frcv2025*+
+  jpa:
+    hibernate:
+      ddl-auto: none   # no crea tablas, Flyway se encarga
+    open-in-view: false
+    show-sql: true
+
+app:
+  auth:
+    google:
+      client-id: 26208503001-i54649qrb15d9h7p8o2s9rko4m0a4nrt.apps.googleusercontent.com
+    jwt:
+      issuer: "frcv-backend"
+      secret: "Hk3Yp9cV2fWjT5bP0xRm8nL1qZ7vD4sM2rQyC8uA6kN0jX5gF1hU9wT3oE6vS2d"
+      ttl-seconds: 28800    # 8 horas
