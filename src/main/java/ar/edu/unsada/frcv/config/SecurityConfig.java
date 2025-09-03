@@ -33,14 +33,12 @@ public class SecurityConfig {
                 // 1) CORS básico (ajustá origins para tu Ionic/host)
                 .cors(cors -> cors.configurationSource(req -> {
                     CorsConfiguration c = new CorsConfiguration();
-                    c.setAllowedOrigins(List.of("http://localhost:8100","http://localhost:5173","https://frcv.voltixsoluciones.com.ar"));
+                    c.setAllowedOriginPatterns(List.of("*")); // acepta cualquier origen
                     c.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
                     c.setAllowedHeaders(List.of("*"));
                     c.setAllowCredentials(true);
                     return c;
                 }))
-
-                // 2) CSRF off (API stateless) + sin sesión
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
