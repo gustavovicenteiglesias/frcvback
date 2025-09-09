@@ -73,6 +73,8 @@ public class AuthService {
         resp.put("jwt", jwt);
         resp.put("userId", user.getId());
         resp.put("email", user.getEmail());
+        resp.put("name",user.getNombre());
+        resp.put("picture",user.getFotoUrl());
         resp.put("roles", roles);
         // Podés decodificar el exp del JWT si querés; acá lo aproximamos:
         resp.put("exp", Instant.now().plusSeconds(28800).getEpochSecond());

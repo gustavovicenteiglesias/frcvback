@@ -81,6 +81,7 @@ public class SecurityConfig {
                 .httpBasic(b -> b.disable())
                 .formLogin(f -> f.disable());
 
+
         // 6) Nuestro filtro JWT
         http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
