@@ -348,6 +348,7 @@ public class SyncController {
                         col("tipo",             "TEXT NOT NULL"),
                         col("fecha",            "TEXT NOT NULL"),
                         col("ubicacion_gps",    "TEXT"),
+                        //col("acceso",           "TEXT"),
                         col("observaciones",    "TEXT"),
                         col("last_modified",    "INTEGER NOT NULL"),
                         col("sql_deleted",   bool0("sql_deleted")),

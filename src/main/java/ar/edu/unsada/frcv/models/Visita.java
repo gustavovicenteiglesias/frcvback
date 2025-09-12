@@ -44,6 +44,9 @@ public class Visita extends BaseEntity {
     @Column(name="ubicacion_gps", length = 128)
     private String ubicacionGps;
 
+    //@Column(name="acceso",columnDefinition = "TINYINT(1)")
+   // private Boolean acceso;
+
     @Lob
     @Column(name="observaciones")
     private String observaciones;
