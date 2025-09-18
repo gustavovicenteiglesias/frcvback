@@ -66,21 +66,19 @@ public class AntecedenteServiceImpl implements AntecedenteService {
             db.setVisita(v);
         }
 
-        db.setCurrent(a.getCurrent());
-        db.setValidFrom(a.getValidFrom());
-        db.setValidTo(a.getValidTo());
-
         db.setTabaquismo(a.getTabaquismo());
-        db.setExTabaquista(a.getExTabaquista());
         db.setDiabetes(a.getDiabetes());
+        db.setTratamientoEnfDiabetes(a.getTratamientoEnfDiabetes());
+        db.setDescTratEnfDiabetes(a.getDescTratEnfDiabetes());
         db.setDislipemia(a.getDislipemia());
+        db.setTratamientoEnfDislipemia(a.getTratamientoEnfDislipemia());
+        db.setDescTratEnfDislipemia(a.getDescTratEnfDislipemia());
         db.setHtaPrevia(a.getHtaPrevia());
-        db.setEnfCardiovascular(a.getEnfCardiovascular());
+        db.setTratamientoHtaPrevia(a.getTratamientoHtaPrevia());
+        db.setDescTratHtaPrevia(a.getDescTratHtaPrevia());
         db.setEnfRenalCronica(a.getEnfRenalCronica());
-        db.setFamCvdPrecoz(a.getFamCvdPrecoz());
-        db.setAlcoholRiesgo(a.getAlcoholRiesgo());
-        db.setActividadFisicaBaja(a.getActividadFisicaBaja());
-        db.setObesidad(a.getObesidad());
+        db.setTratamientoEnfRenal(a.getTratamientoEnfRenal());
+        db.setDescTratEnfRenal(a.getDescTratEnfRenal());
         db.setOtros(a.getOtros());
 
         db.setCreatedBy(a.getCreatedBy());

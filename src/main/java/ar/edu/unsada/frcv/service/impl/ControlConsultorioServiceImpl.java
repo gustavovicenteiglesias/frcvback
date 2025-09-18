@@ -13,22 +13,29 @@ import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
-@Service @Transactional
+@Service
+@Transactional
 public class ControlConsultorioServiceImpl implements ControlConsultorioService {
     private final ControlConsultorioRepository repo;
     private final VisitaRepository visitaRepo;
 
     public ControlConsultorioServiceImpl(ControlConsultorioRepository repo, VisitaRepository visitaRepo) {
-        this.repo = repo; this.visitaRepo = visitaRepo;
+        this.repo = repo;
+        this.visitaRepo = visitaRepo;
     }
 
-    @Override public Iterable<ControlConsultorio> list() { return repo.findBySqlDeletedFalse(); }
+    @Override
+    public Iterable<ControlConsultorio> list() {
+        return repo.findBySqlDeletedFalse();
+    }
 
-    @Override public Optional<ControlConsultorio> get(String id) {
+    @Override
+    public Optional<ControlConsultorio> get(String id) {
         return repo.findById(id).filter(c -> !Boolean.TRUE.equals(c.getSqlDeleted()));
     }
 
-    @Override public ControlConsultorio create(ControlConsultorio c, String visitaId) {
+    @Override
+    public ControlConsultorio create(ControlConsultorio c, String visitaId) {
         Visita v = visitaRepo.findById(visitaId).filter(x -> !Boolean.TRUE.equals(x.getSqlDeleted()))
                 .orElseThrow(() -> new NoSuchElementException("Visita no encontrada"));
         if (repo.existsByVisitaIdAndSqlDeletedFalse(visitaId))
@@ -41,7 +48,8 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
         return repo.save(c);
     }
 
-    @Override public ControlConsultorio update(String id, ControlConsultorio c, String visitaId) {
+    @Override
+    public ControlConsultorio update(String id, ControlConsultorio c, String visitaId) {
         ControlConsultorio db = get(id).orElseThrow(() -> new NoSuchElementException("Control de consultorio no encontrado"));
 
         if (visitaId != null) {
@@ -51,10 +59,26 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
                     .orElseThrow(() -> new NoSuchElementException("Visita no encontrada"));
             db.setVisita(v);
         }
-
+        db.setFecha(c.getFecha());
+        db.setAsistencia(c.getAsistencia());
         db.setTaSistolica(c.getTaSistolica());
         db.setTaDiastolica(c.getTaDiastolica());
-        db.setMedicacionJson(c.getMedicacionJson());
+        db.setConfirm_hta(c.getConfirm_hta());
+        db.setPeso(c.getPeso());
+        db.setTalla(c.getTalla());
+        db.setImc(c.getImc());
+        db.setCircCintura(c.getCircCintura());
+        db.setEntregaMedicacion(c.getEntregaMedicacion());
+        db.setControlMedicacion(c.getControlMedicacion());
+        db.setConducta(c.getConducta());
+        db.setEventos(c.getEventos());
+        db.setObservaciones_eventos(c.getObservaciones_eventos());
+        db.setDerivacion(c.getDerivacion());
+        db.setObservaciones_derivacion(c.getObservaciones_derivacion());
+        db.setFumador(c.getFumador());
+        db.setObservaciones(c.getObservaciones());
+        db.setMedicacion(c.getMedicacion());
+        //db.setMedicacionJson(c.getMedicacionJson());
         db.setConducta(c.getConducta());
         db.setCreatedBy(c.getCreatedBy());
 
@@ -62,7 +86,8 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
         return repo.save(db);
     }
 
-    @Override public void delete(String id) {
+    @Override
+    public void delete(String id) {
         ControlConsultorio db = get(id).orElseThrow(() -> new NoSuchElementException("Control de consultorio no encontrado"));
         db.setSqlDeleted(true);
         db.setLastModified(Instant.now().toEpochMilli());

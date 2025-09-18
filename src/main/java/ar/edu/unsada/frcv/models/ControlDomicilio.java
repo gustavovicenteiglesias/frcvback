@@ -31,19 +31,21 @@ public class ControlDomicilio extends BaseEntity {
 
     @Column(name="ta_diastolica")
     private Integer taDiastolica;
+    /*
+        @Column(name="frecuencia_cardiaca")
+        private Integer frecuenciaCardiaca;
 
-    @Column(name="frecuencia_cardiaca")
-    private Integer frecuenciaCardiaca;
+        @Column(name="peso")  private BigDecimal peso;   // (6,2)
+        @Column(name="talla") private BigDecimal talla;  // (5,2)
+        @Column(name="imc")   private BigDecimal imc;    // (5,2)
 
-    @Column(name="peso")  private BigDecimal peso;   // (6,2)
-    @Column(name="talla") private BigDecimal talla;  // (5,2)
-    @Column(name="imc")   private BigDecimal imc;    // (5,2)
+        @Column(name="riesgo_cv")
+        private Byte riesgoCv;*/
+    @Column(name="acepta_laboratotio", columnDefinition = "TINYINT(1)")
+    private Boolean aceptaLaboratotio;
 
-    @Column(name="riesgo_cv")
-    private Byte riesgoCv;
-
-    @Column(name="derivar_a_consultorio", columnDefinition = "TINYINT(1)")
-    private Boolean derivarAConsultorio;
+    @Column(name="accede_programa", columnDefinition = "TINYINT(1)")
+    private Boolean accedePrograma;
 
     @Lob
     @Column(name="observaciones")

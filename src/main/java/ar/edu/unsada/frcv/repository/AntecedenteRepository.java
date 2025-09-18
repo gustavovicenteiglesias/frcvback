@@ -8,5 +8,5 @@ import org.springframework.data.repository.CrudRepository;
 public interface AntecedenteRepository extends CrudRepository<Antecedente, String> {
     Iterable<Antecedente> findBySqlDeletedFalse();
     Iterable<Antecedente> findByPersonaAndSqlDeletedFalse(Persona persona);
-    Iterable<Antecedente> findByPersonaIdAndCurrentTrueAndSqlDeletedFalse(String personaId);
+    //Iterable<Antecedente> findByPersonaIdAndCurrentTrueAndSqlDeletedFalse(String personaId);
 }

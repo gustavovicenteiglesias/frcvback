@@ -39,7 +39,7 @@ public class PersonaServiceImpl implements PersonaService {
         db.setSexo(p.getSexo());
         db.setFechaNac(p.getFechaNac());
         db.setTelefono(p.getTelefono());
-        db.setDireccion(p.getDireccion());
+        //db.setDireccion(p.getDireccion());
         db.setLastModified(Instant.now().toEpochMilli());
         return repo.save(db);
     }

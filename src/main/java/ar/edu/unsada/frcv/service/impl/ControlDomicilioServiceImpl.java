@@ -55,12 +55,14 @@ public class ControlDomicilioServiceImpl implements ControlDomicilioService {
 
         db.setTaSistolica(c.getTaSistolica());
         db.setTaDiastolica(c.getTaDiastolica());
-        db.setFrecuenciaCardiaca(c.getFrecuenciaCardiaca());
-        db.setPeso(c.getPeso());
-        db.setTalla(c.getTalla());
-        db.setImc(c.getImc());
-        db.setRiesgoCv(c.getRiesgoCv());
-        db.setDerivarAConsultorio(c.getDerivarAConsultorio());
+        //db.setFrecuenciaCardiaca(c.getFrecuenciaCardiaca());
+        //db.setPeso(c.getPeso());
+        //db.setTalla(c.getTalla());
+        //db.setImc(c.getImc());
+        //db.setRiesgoCv(c.getRiesgoCv());
+        //db.setDerivarAConsultorio(c.getDerivarAConsultorio());
+        db.setAceptaLaboratotio(c.getAceptaLaboratotio());
+        db.setAccedePrograma(c.getAccedePrograma());
         db.setObservaciones(c.getObservaciones());
         db.setCreatedBy(c.getCreatedBy());
 

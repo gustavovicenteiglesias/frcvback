@@ -36,6 +36,9 @@ public class Persona extends BaseEntity {
     @Column(name="telefono", length = 64)
     private String telefono;
 
-    @Column(name="direccion", length = 256)
-    private String direccion;
+   /* @Column(name="direccion", length = 256)
+    private String direccion;*/
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "viviendas_id")
+    private Viviendas viviendas;
 }

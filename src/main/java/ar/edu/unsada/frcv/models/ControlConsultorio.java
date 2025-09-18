@@ -3,6 +3,9 @@ package ar.edu.unsada.frcv.models;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 @Entity
 @Table(name = "control_consultorio",
         uniqueConstraints = @UniqueConstraint(name="uk_cc_visita", columnNames = "visita_id"),
@@ -25,16 +28,54 @@ public class ControlConsultorio extends BaseEntity {
     @JoinColumn(name = "created_by_user_id")
     private UserEntity createdBy;
 
-    @Column(name="ta_sistolica")
+    @Column(name = "fecha")
+    private LocalDate fecha;
+
+    @Column(name = "asistencia",columnDefinition = "TINYINT(1)")
+    private Boolean asistencia;
+
+     @Column(name="ta_sistolica")
     private Integer taSistolica;
 
     @Column(name="ta_diastolica")
     private Integer taDiastolica;
 
-    @Column(name = "medicacion_json", columnDefinition = "json")
-    private String medicacionJson;
+    @Column(name = "confirm_hta",columnDefinition = "TINYINT(1)")
+    private Boolean confirm_hta;
 
-    @Lob
-    @Column(name="conducta")
-    private String conducta;
+    @Column(name="peso")  private BigDecimal peso;   // (6,2)
+    @Column(name="talla") private BigDecimal talla;  // (5,2)
+    @Column(name="imc")   private BigDecimal imc;
+
+    @Column(name = "circ_cintura")
+    private Integer circCintura;
+
+    @Column(name = "entrega_medicacion",columnDefinition = "TINYINT(1)")
+    private Boolean entregaMedicacion;
+
+    @Column(name = "control_medicacion",columnDefinition = "TINYINT(1)")
+    private Boolean controlMedicacion;// Bueno o malo
+
+    @Column(name = "conducta",columnDefinition = "TINYINT(1)")
+    private Boolean conducta;
+
+    @Column(name="eventos",columnDefinition = "TINYINT(1)")
+    private Boolean eventos;
+    @Column(name = "observaciones_eventos")
+    private String observaciones_eventos;
+
+    @Column(name = "derivacion",columnDefinition = "TINYINT(1)")
+    private Boolean derivacion;
+    @Column(name = "observaciones_derivacion")
+    private String observaciones_derivacion;
+
+    @Column(name="fumador")
+    private Boolean fumador;
+    @Column(name = "Observaciones")
+    private String observaciones;
+
+    @Column(name = "medicacion", columnDefinition = "text")
+    private String medicacion;
+
+
 }
