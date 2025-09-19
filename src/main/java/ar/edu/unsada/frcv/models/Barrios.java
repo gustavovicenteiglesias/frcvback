@@ -13,7 +13,7 @@ import java.time.LocalDate;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Barrios extends BaseEntity{
     @Id
-    @Column(name = "id_barrios", length = 36)
+    @Column(name = "id", length = 36)
     private String idBarrios;
 
     private String nombre;

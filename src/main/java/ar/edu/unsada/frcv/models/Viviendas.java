@@ -15,8 +15,8 @@ import java.time.LocalDate;
 
 public class Viviendas extends BaseEntity{
     @Id
-    @Column(name = "id_vivienda", length = 36)
-    private String idVivienda;
+    @Column(name = "id", length = 36)
+    private String id;
 
     private String longitud;
     private String latitud;

@@ -44,13 +44,13 @@ public class SyncController {
        ========================================================= */
     private static final Map<String, List<String>> MOBILE_COLS = new LinkedHashMap<>() {{
         put("barrios", List.of(
-                "id_barrios", "nombre", "last_modified", "sql_deleted"
+                "id", "nombre", "last_modified", "sql_deleted"
         ));
         put("caps", List.of(
-                "id_caps", "nombre", "last_modified", "sql_deleted"
+                "id", "nombre", "last_modified", "sql_deleted"
         ));
         put("viviendas", List.of(
-                "id_vivienda", "barrios_id", "caps_id", "fecha", "accedio", "casa", "manzana",
+                "id", "barrios_id", "caps_id", "fecha", "accedio", "casa", "manzana",
                 "latitud", "longitud", "direccion", "last_modified", "sql_deleted"
         ));
         put("personas", List.of(
@@ -229,7 +229,7 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "barrios",
                 List.of(
-                        col("id_barrios", "TEXT PRIMARY KEY NOT NULL"),
+                        col("id", "TEXT PRIMARY KEY NOT NULL"),
                         col("nombre", "TEXT"),
                         col("last_modified", "INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted"))
@@ -239,14 +239,14 @@ public class SyncController {
                         idx("idx_barrios_sd", "sql_deleted")
                 ),
                 null,
-                selectValuesSec("barrios", List.of("id_barrios", "nombre", "last_modified", "sql_deleted"))
+                selectValuesSec("barrios", List.of("id", "nombre", "last_modified", "sql_deleted"))
         ));
 
         // ---------- caps ----------
         tables.add(tableWithSchemaIdxValues(
                 "caps",
                 List.of(
-                        col("id_caps", "TEXT PRIMARY KEY NOT NULL"),
+                        col("id", "TEXT PRIMARY KEY NOT NULL"),
                         col("nombre", "TEXT"),
                         col("last_modified", "INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted"))
@@ -256,14 +256,14 @@ public class SyncController {
                         idx("idx_caps_sd", "sql_deleted")
                 ),
                 null,
-                selectValuesSec("caps", List.of("id_caps", "nombre", "last_modified", "sql_deleted"))
+                selectValuesSec("caps", List.of("id", "nombre", "last_modified", "sql_deleted"))
         ));
 
         // ---------- viviendas ----------
         tables.add(tableWithSchemaIdxValues(
                 "viviendas",
                 List.of(
-                        col("id_vivienda", "TEXT PRIMARY KEY NOT NULL"),
+                        col("id", "TEXT PRIMARY KEY NOT NULL"),
                         col("barrios_id", "TEXT"),
                         col("caps_id", "TEXT"),
                         col("fecha", "TEXT"),
@@ -275,8 +275,8 @@ public class SyncController {
                         col("direccion", "TEXT"),
                         col("last_modified", "INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("barrios_id", "REFERENCES barrios(id_barrios) ON DELETE SET NULL"),
-                        fk("caps_id", "REFERENCES caps(id_caps) ON DELETE SET NULL")
+                        fk("barrios_id", "REFERENCES barrios(id) ON DELETE SET NULL"),
+                        fk("caps_id", "REFERENCES caps(id) ON DELETE SET NULL")
                 ),
                 List.of(
                         idx("idx_viviendas_lm", "last_modified"),
@@ -286,7 +286,7 @@ public class SyncController {
                 ),
                 null,
                 selectValuesSec("viviendas", List.of(
-                        "id_vivienda", "barrios_id", "caps_id", "fecha", "accedio", "casa", "manzana",
+                        "id", "barrios_id", "caps_id", "fecha", "accedio", "casa", "manzana",
                         "latitud", "longitud", "direccion", "last_modified", "sql_deleted"
                 ))
         ));
@@ -305,7 +305,7 @@ public class SyncController {
                         col("viviendas_id", "TEXT"),
                         col("last_modified", "INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("viviendas_id", "REFERENCES viviendas(id_vivienda) ON DELETE SET NULL")
+                        fk("viviendas_id", "REFERENCES viviendas(id) ON DELETE SET NULL")
                 ),
                 List.of(
                         idx("idx_personas_lm", "last_modified"),

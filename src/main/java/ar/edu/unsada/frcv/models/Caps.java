@@ -13,7 +13,7 @@ import java.time.LocalDate;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Caps extends BaseEntity{
     @Id
-    @Column(name = "id_caps", length = 36)
+    @Column(name = "id", length = 36)
     private String idcaps;
 
     private String nombre;

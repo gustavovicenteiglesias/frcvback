@@ -42,7 +42,7 @@ public class ViviendasServiceImpl implements ViviendasService {
         v.setCaps(caps);
         v.setSqlDeleted(false);
         v.setLastModified(Instant.now().toEpochMilli());
-        if (v.getIdVivienda() == null || v.getIdVivienda().isBlank()) v.setIdVivienda(java.util.UUID.randomUUID().toString());
+        if (v.getId() == null || v.getId().isBlank()) v.setId(java.util.UUID.randomUUID().toString());
         viviendasRepository.save(v);
         return v;
     }

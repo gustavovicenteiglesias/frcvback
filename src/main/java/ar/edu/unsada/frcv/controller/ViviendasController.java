@@ -28,7 +28,7 @@ public class ViviendasController {
     @PostMapping("/{b}/{c}")
     public ResponseEntity<Viviendas> save(@Valid @RequestBody Viviendas v, @PathVariable String b, @PathVariable String c) {
         Viviendas saved=service.create(v,b,c);
-        return ResponseEntity.created(URI.create("/api/vivivienda/*"+ saved.getIdVivienda())).body(saved);
+        return ResponseEntity.created(URI.create("/api/vivivienda/*"+ saved.getId())).body(saved);
     }
 
     @PutMapping("/{id}/{b}/{c}")
