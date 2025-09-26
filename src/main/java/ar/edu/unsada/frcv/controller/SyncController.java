@@ -529,7 +529,20 @@ public class SyncController {
                         idx("idx_ant_medhta_lm","last_modified"),
                         idx("idx_ant_medhta_sd","sql_deleted")
                 ),
-                null,
+                List.of( // <<--- TRIGGER CORRECTO
+                        trigger(
+                                "antecedente_has_medicacion_hta_trigger_last_modified",
+                                "CREATE TRIGGER IF NOT EXISTS antecedente_has_medicacion_hta_trigger_last_modified " +
+                                        "AFTER UPDATE ON antecedente_has_medicacion_hta " +
+                                        "FOR EACH ROW WHEN NEW.last_modified <= OLD.last_modified " +
+                                        "BEGIN " +
+                                        "  UPDATE antecedente_has_medicacion_hta " +
+                                        "     SET last_modified = CAST(strftime('%s','now') AS INTEGER) " +
+                                        "   WHERE antecedente_id = NEW.antecedente_id " +
+                                        "     AND medicacion_id  = NEW.medicacion_id; " +
+                                        "END;"
+                        )
+                ),
                 selectValuesSec("antecedente_has_medicacion_hta", List.of(
                         "antecedente_id","medicacion_id","last_modified","sql_deleted"
                 ))
@@ -772,6 +785,13 @@ public class SyncController {
     private Map<String, Object> idxUnique(String name, String valueExpr) {
         Map<String, Object> m = idx(name, valueExpr);
         m.put("mode", "UNIQUE");
+        return m;
+    }
+
+    private Map<String, Object> trigger(String name, String ddl) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("name", name);
+        m.put("value", ddl); // el plugin acepta el SQL completo en "value"
         return m;
     }
 
