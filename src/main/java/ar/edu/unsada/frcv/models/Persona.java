@@ -1,5 +1,6 @@
 package ar.edu.unsada.frcv.models;
 
+import ar.edu.unsada.frcv.models.enums.CoberturaSalud;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
@@ -35,6 +36,11 @@ public class Persona extends BaseEntity {
 
     @Column(name="telefono", length = 64)
     private String telefono;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cobertura_salud", length = 40)
+    //@JsonProperty("cobertura_salud") // si tu JSON va en snake_case; si usás camelCase, podés quitarlo.
+    private CoberturaSalud coberturaSalud;
 
    /* @Column(name="direccion", length = 256)
     private String direccion;*/

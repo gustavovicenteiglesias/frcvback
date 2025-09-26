@@ -6,6 +6,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "antecedentes",
@@ -31,24 +33,16 @@ public class Antecedente extends BaseEntity {
     @JsonIgnore
     private Visita visita;
 
+
+
     @ManyToOne
     @JoinColumn(name = "created_by_user_id")
     private UserEntity createdBy;
 
-    /*@Column(name="valid_from", nullable = false)
-    private LocalDateTime validFrom;*/
-
-    /*@Column(name="valid_to")
-    private LocalDateTime validTo;*/
-
-    /*@Column(name="is_current", nullable = false, columnDefinition = "TINYINT(1)")
-    private Boolean current = true;*/
 
     @Column(name="tabaquismo", columnDefinition = "TINYINT(1)")
     private Boolean tabaquismo;
 
-    /*@Column(name="ex_tabaquista", columnDefinition = "TINYINT(1)")
-    private Boolean exTabaquista;*/
 
     //Agregué al la columna de enfermedad deabetes un check de tratamiento y medicacion
     @Column(name="diabetes", columnDefinition = "TINYINT(1)")
@@ -75,6 +69,23 @@ public class Antecedente extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private TratamientoHta descTratHtaPrevia;
 
+    // en Antecedente.java
+    @OneToMany(mappedBy = "antecedente", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, orphanRemoval = false)
+    private java.util.Set<AntecedenteMedicacionHta> medicacionesHta = new java.util.LinkedHashSet<>();
+
+    public void setMedicacionesHtaSet(java.util.Set<MedicacionHta> nuevas) {
+        // reemplazo semántica de multiselect
+        var links = new java.util.LinkedHashSet<AntecedenteMedicacionHta>();
+        if (nuevas != null) {
+            for (MedicacionHta m : nuevas) {
+                if (m != null && m.getId() != null && !m.getId().isBlank()) {
+                    links.add(AntecedenteMedicacionHta.link(this, m));
+                }
+            }
+        }
+        this.medicacionesHta.clear();
+        this.medicacionesHta.addAll(links);
+    }
 
     //Agregué al la columna de enfermedad cardiovascular un check de tratamiento y medicacion
     @Column(name="enf_cardiovascular", columnDefinition = "TINYINT(1)")
@@ -93,17 +104,7 @@ public class Antecedente extends BaseEntity {
     @Column(name = "desc_trat_enf_renal")
     private String descTratEnfRenal;
 
-    /*@Column(name="fam_cvd_precoz", columnDefinition = "TINYINT(1)")
-    private Boolean famCvdPrecoz;
 
-    @Column(name="alcohol_riesgo", columnDefinition = "TINYINT(1)")
-    private Boolean alcoholRiesgo;
-
-    @Column(name="actividad_fisica_baja", columnDefinition = "TINYINT(1)")
-    private Boolean actividadFisicaBaja;
-
-    @Column(name="obesidad", columnDefinition = "TINYINT(1)")
-    private Boolean obesidad;*/
 
     @Lob
     @Column(name="otros")

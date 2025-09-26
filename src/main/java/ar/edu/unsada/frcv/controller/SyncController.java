@@ -1,4 +1,3 @@
-
 package ar.edu.unsada.frcv.controller;
 
 import org.springframework.http.ResponseEntity;
@@ -7,7 +6,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.sql.*;
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,71 +31,81 @@ public class SyncController {
             "visitas",
             "control_domicilio",
             "control_consultorio",
-            "antecedentes",
+            "medicacion_hta",                 // catálogo con LM/SD
+            "antecedentes",                   // dueño lógico
+            "antecedente_has_medicacion_hta", // puente con LM/SD
             "lab_tipos",
             "lab_resultados"
     );
 
     /* =========================================================
        Orden de columnas móvil EXACTO (arrays de arrays)
-       Debe matchear 1:1 con el esquema SQLite del device.
        ========================================================= */
     private static final Map<String, List<String>> MOBILE_COLS = new LinkedHashMap<>() {{
-        put("barrios", List.of(
-                "id", "nombre", "last_modified", "sql_deleted"
-        ));
-        put("caps", List.of(
-                "id", "nombre", "last_modified", "sql_deleted"
-        ));
+        put("barrios", List.of("id","nombre","last_modified","sql_deleted"));
+        put("caps", List.of("id","nombre","last_modified","sql_deleted"));
         put("viviendas", List.of(
-                "id", "barrios_id", "caps_id", "fecha", "accedio", "casa", "manzana",
-                "latitud", "longitud", "direccion", "last_modified", "sql_deleted"
+                "id","barrios_id","caps_id","fecha","accedio","casa","manzana",
+                "latitud","longitud","direccion","last_modified","sql_deleted"
         ));
         put("personas", List.of(
-                "id", "dni", "apellido", "nombre", "sexo", "fecha_nac", "telefono",
-                "viviendas_id", "last_modified", "sql_deleted"
+                "id","dni","apellido","nombre","sexo","fecha_nac","telefono","cobertura_salud",
+                "viviendas_id","last_modified","sql_deleted"
         ));
         put("responsables", List.of(
-                "id", "user_id", "nombre", "matricula", "email", "activo", "last_modified", "sql_deleted"
+                "id","user_id","nombre","matricula","email","activo","last_modified","sql_deleted"
         ));
         put("visitas", List.of(
-                "id", "persona_id", "responsable_id", "created_by_user_id", "tipo", "fecha",
-                "ubicacion_gps", "observaciones", "last_modified", "sql_deleted"
+                "id","persona_id","responsable_id","created_by_user_id","tipo","fecha",
+                "ubicacion_gps","observaciones","last_modified","sql_deleted"
         ));
         put("control_domicilio", List.of(
-                "id", "visita_id", "created_by_user_id", "ta_sistolica", "ta_diastolica",
-                "accede_programa", "acepta_laboratotio", "observaciones", "last_modified", "sql_deleted"
+                "id","visita_id","created_by_user_id","ta_sistolica","ta_diastolica",
+                "accede_programa","acepta_laboratotio","observaciones","last_modified","sql_deleted"
         ));
         put("control_consultorio", List.of(
-                "id", "visita_id", "created_by_user_id", "fecha", "asistencia",
-                "ta_sistolica", "ta_diastolica",
-                "peso", "talla", "imc",
-                "circ_cintura", "fumador",
-                "confirm_hta", "control_medicacion", "derivacion", "entrega_medicacion", "eventos", "conducta",
-                "medicacion", "observaciones", "observaciones_derivacion", "observaciones_eventos",
-                "last_modified", "sql_deleted"
+                "id","visita_id","created_by_user_id","fecha","asistencia",
+                "ta_sistolica","ta_diastolica",
+                "peso","talla","imc",
+                "circ_cintura","fumador",
+                "confirm_hta","control_medicacion","derivacion","entrega_medicacion","eventos","conducta",
+                "medicacion","observaciones","observaciones_derivacion","observaciones_eventos",
+                "last_modified","sql_deleted"
         ));
         put("antecedentes", List.of(
-                "id", "persona_id", "visita_id", "created_by_user_id",
-                "diabetes", "dislipemia", "enf_cardiovascular", "enf_renal_cronica", "hta_previa", "tabaquismo",
-                "tratamiento_enf_cardiovascular", "tratamiento_enf_diabetes", "tratamiento_enf_dislipemia",
-                "tratamiento_enf_renal", "tratamiento_hta_previa",
-                "desc_trat_enf_diabetes", "desc_trat_hta_previa",
-                "otros", "last_modified", "sql_deleted"
+                "id","persona_id","visita_id","created_by_user_id",
+                "diabetes","dislipemia","enf_cardiovascular","enf_renal_cronica","hta_previa","tabaquismo",
+                "tratamiento_enf_cardiovascular","tratamiento_enf_diabetes","tratamiento_enf_dislipemia",
+                "tratamiento_enf_renal","tratamiento_hta_previa",
+                "desc_trat_enf_diabetes","desc_trat_hta_previa",
+                "otros","last_modified","sql_deleted"
         ));
         put("lab_tipos", List.of(
-                "id", "codigo", "nombre", "unidad_default", "ref_min", "ref_max", "last_modified", "sql_deleted"
+                "id","codigo","nombre","unidad_default","ref_min","ref_max","last_modified","sql_deleted"
         ));
-        // Nota: created_by_user_id va ANTES de fecha_realizado
         put("lab_resultados", List.of(
-                "id", "persona_id", "visita_id", "tipo_id", "created_by_user_id", "fecha_realizado",
-                "valor_num", "valor_texto", "unidad", "laboratorio", "observaciones", "last_modified", "sql_deleted"
+                "id","persona_id","visita_id","tipo_id","created_by_user_id","fecha_realizado",
+                "valor_num","valor_texto","unidad","laboratorio","observaciones","last_modified","sql_deleted"
+        ));
+
+        // ==== NUEVAS TABLAS con LM/SD ====
+        put("medicacion_hta", List.of(
+                "id","nombre","last_modified","sql_deleted"
+        ));
+        put("antecedente_has_medicacion_hta", List.of(
+                "antecedente_id","medicacion_id","last_modified","sql_deleted"
         ));
     }};
 
-    /**
-     * Devuelve el nombre de PK para la tabla usando la 1ra columna definida en MOBILE_COLS (fallback "id").
-     */
+    /** PK compuesta por tabla (si no está, se toma la primera columna como PK simple) */
+    private static final Map<String, List<String>> COMPOSITE_PKS = new HashMap<>() {{
+        put("antecedente_has_medicacion_hta", List.of("antecedente_id","medicacion_id"));
+    }};
+
+    private List<String> pkFor(String table) {
+        return COMPOSITE_PKS.getOrDefault(table, List.of(pkNameFor(table)));
+    }
+
     private String pkNameFor(String table) {
         List<String> cols = MOBILE_COLS.get(table);
         if (cols != null && !cols.isEmpty()) return cols.get(0);
@@ -121,18 +129,23 @@ public class SyncController {
             boolean hasLm = cols.contains(LM);
 
             String sql = hasLm
-                    ? "SELECT * FROM " + table + " WHERE " + LM + " > ?"
-                    : "SELECT * FROM " + table;
+                    ? "SELECT " + String.join(",", cols) + " FROM " + table + " WHERE " + LM + " > ?"
+                    : "SELECT " + String.join(",", cols) + " FROM " + table;
 
             List<Map<String, Object>> rows = hasLm
                     ? jdbc.queryForList(sql, cutoffSec)
                     : jdbc.queryForList(sql);
 
-            // Convertimos a arrays en el orden esperado por el móvil
             List<List<Object>> values = new ArrayList<>(rows.size());
             for (Map<String, Object> r : rows) {
                 List<Object> arr = new ArrayList<>(cols.size());
-                for (String c : cols) arr.add(r.get(c));
+                for (String c : cols) {
+                    Object v = r.get(c);
+                    if (v instanceof Boolean b) v = b ? 1 : 0;
+                    if (LM.equalsIgnoreCase(c)) v = toEpochSeconds(v);
+                    if (isBooleanishColumn(c)) v = boolAsInt(v);
+                    arr.add(v);
+                }
                 values.add(arr);
             }
 
@@ -162,7 +175,6 @@ public class SyncController {
             return ResponseEntity.badRequest().body(Map.of("error", "Formato inválido: falta 'tables'"));
         }
 
-        // Parse entrante: tabla -> filas (arrays ordenados)
         Map<String, List<List<Object>>> incoming = new HashMap<>();
         for (Object o : rawTables) {
             if (!(o instanceof Map<?, ?> tm)) continue;
@@ -185,28 +197,32 @@ public class SyncController {
 
             List<String> cols = MOBILE_COLS.getOrDefault(table, getTableColumns(table));
             boolean hasLm = cols.contains(LM);
-            String pkName = pkNameFor(table);
+            List<String> pkCols = pkFor(table);
 
             for (List<Object> rowArr : incoming.get(table)) {
                 Map<String, Object> row = zipRow(cols, rowArr);
-                Object idVal = row.get(pkName);
-                if (idVal == null) {
-                    skipped++;
-                    continue;
-                }
 
-                Map<String, Object> existing = findById(table, pkName, idVal);
+                List<Object> pkVals = new ArrayList<>(pkCols.size());
+                boolean missingPk = false;
+                for (String pkCol : pkCols) {
+                    Object v = row.get(pkCol);
+                    if (v == null || (v instanceof String s && s.isBlank())) { missingPk = true; break; }
+                    pkVals.add(v);
+                }
+                if (missingPk) { skipped++; continue; }
+
+                Map<String, Object> existing = findByPk(table, pkCols, pkVals);
                 if (existing == null) {
                     insertRow(table, row);
                     applied++;
                 } else if (!hasLm) {
-                    updateRow(table, row, pkName, idVal);
+                    updateRow(table, row, pkCols, pkVals);
                     applied++;
                 } else {
                     long inLm = toEpochSeconds(row.get(LM));
                     long exLm = toEpochSeconds(existing.get(LM));
                     if (inLm > exLm) {
-                        updateRow(table, row, pkName, idVal);
+                        updateRow(table, row, pkCols, pkVals);
                         applied++;
                     } else {
                         skipped++;
@@ -229,65 +245,59 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "barrios",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("nombre", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("nombre","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted"))
                 ),
-                List.of(
-                        idx("idx_barrios_lm", "last_modified"),
-                        idx("idx_barrios_sd", "sql_deleted")
-                ),
+                List.of(idx("idx_barrios_lm","last_modified"), idx("idx_barrios_sd","sql_deleted")),
                 null,
-                selectValuesSec("barrios", List.of("id", "nombre", "last_modified", "sql_deleted"))
+                selectValuesSec("barrios", List.of("id","nombre","last_modified","sql_deleted"))
         ));
 
         // ---------- caps ----------
         tables.add(tableWithSchemaIdxValues(
                 "caps",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("nombre", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("nombre","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted"))
                 ),
-                List.of(
-                        idx("idx_caps_lm", "last_modified"),
-                        idx("idx_caps_sd", "sql_deleted")
-                ),
+                List.of(idx("idx_caps_lm","last_modified"), idx("idx_caps_sd","sql_deleted")),
                 null,
-                selectValuesSec("caps", List.of("id", "nombre", "last_modified", "sql_deleted"))
+                selectValuesSec("caps", List.of("id","nombre","last_modified","sql_deleted"))
         ));
 
         // ---------- viviendas ----------
         tables.add(tableWithSchemaIdxValues(
                 "viviendas",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("barrios_id", "TEXT"),
-                        col("caps_id", "TEXT"),
-                        col("fecha", "TEXT"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("barrios_id","TEXT"),
+                        col("caps_id","TEXT"),
+                        col("fecha","TEXT"),
                         col("accedio", bool("accedio")),
-                        col("casa", "TEXT"),
-                        col("manzana", "TEXT"),
-                        col("latitud", "TEXT"),
-                        col("longitud", "TEXT"),
-                        col("direccion", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("casa","TEXT"),
+                        col("manzana","TEXT"),
+                        col("latitud","TEXT"),
+                        col("longitud","TEXT"),
+                        col("direccion","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("barrios_id", "REFERENCES barrios(id) ON DELETE SET NULL"),
-                        fk("caps_id", "REFERENCES caps(id) ON DELETE SET NULL")
+                        fk("barrios_id","REFERENCES barrios(id) ON DELETE SET NULL"),
+                        fk("caps_id","REFERENCES caps(id) ON DELETE SET NULL")
                 ),
                 List.of(
-                        idx("idx_viviendas_lm", "last_modified"),
-                        idx("idx_viviendas_sd", "sql_deleted"),
-                        idx("idx_viviendas_barrio", "barrios_id"),
-                        idx("idx_viviendas_caps", "caps_id")
+                        idx("idx_viviendas_lm","last_modified"),
+                        idx("idx_viviendas_sd","sql_deleted"),
+                        idx("idx_viviendas_barrio","barrios_id"),
+                        idx("idx_viviendas_caps","caps_id")
                 ),
                 null,
                 selectValuesSec("viviendas", List.of(
-                        "id", "barrios_id", "caps_id", "fecha", "accedio", "casa", "manzana",
-                        "latitud", "longitud", "direccion", "last_modified", "sql_deleted"
+                        "id","barrios_id","caps_id","fecha","accedio","casa","manzana",
+                        "latitud","longitud","direccion","last_modified","sql_deleted"
                 ))
         ));
 
@@ -295,25 +305,24 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "personas",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("dni", "TEXT"),
-                        col("apellido", "TEXT NOT NULL"),
-                        col("nombre", "TEXT NOT NULL"),
-                        col("sexo", "TEXT"),
-                        col("fecha_nac", "TEXT"),
-                        col("telefono", "TEXT"),
-                        col("viviendas_id", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("dni","TEXT"),
+                        col("apellido","TEXT NOT NULL"),
+                        col("nombre","TEXT NOT NULL"),
+                        col("sexo","TEXT"),
+                        col("fecha_nac","TEXT"),
+                        col("telefono","TEXT"),
+                        col("cobertura_salud","TEXT"),
+                        col("viviendas_id","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("viviendas_id", "REFERENCES viviendas(id) ON DELETE SET NULL")
+                        fk("viviendas_id","REFERENCES viviendas(id) ON DELETE SET NULL")
                 ),
-                List.of(
-                        idx("idx_personas_lm", "last_modified"),
-                        idx("idx_personas_sd", "sql_deleted")
-                ),
+                List.of(idx("idx_personas_lm","last_modified"), idx("idx_personas_sd","sql_deleted")),
                 null,
                 selectValuesSec("personas", List.of(
-                        "id", "dni", "apellido", "nombre", "sexo", "fecha_nac", "telefono", "viviendas_id", "last_modified", "sql_deleted"
+                        "id","dni","apellido","nombre","sexo","fecha_nac","telefono","cobertura_salud",
+                        "viviendas_id","last_modified","sql_deleted"
                 ))
         ));
 
@@ -321,22 +330,19 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "responsables",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("user_id", "TEXT"),
-                        col("nombre", "TEXT NOT NULL"),
-                        col("matricula", "TEXT"),
-                        col("email", "TEXT"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("user_id","TEXT"),
+                        col("nombre","TEXT NOT NULL"),
+                        col("matricula","TEXT"),
+                        col("email","TEXT"),
                         col("activo", bool1("activo")),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted"))
                 ),
-                List.of(
-                        idx("idx_resp_lm", "last_modified"),
-                        idx("idx_resp_sd", "sql_deleted")
-                ),
+                List.of(idx("idx_resp_lm","last_modified"), idx("idx_resp_sd","sql_deleted")),
                 null,
                 selectValuesSec("responsables", List.of(
-                        "id", "user_id", "nombre", "matricula", "email", "activo", "last_modified", "sql_deleted"
+                        "id","user_id","nombre","matricula","email","activo","last_modified","sql_deleted"
                 ))
         ));
 
@@ -344,29 +350,29 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "visitas",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("persona_id", "TEXT NOT NULL"),
-                        col("responsable_id", "TEXT NOT NULL"),
-                        col("created_by_user_id", "TEXT"),
-                        col("tipo", "TEXT NOT NULL"),
-                        col("fecha", "TEXT NOT NULL"),
-                        col("ubicacion_gps", "TEXT"),
-                        col("observaciones", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("persona_id","TEXT NOT NULL"),
+                        col("responsable_id","TEXT NOT NULL"),
+                        col("created_by_user_id","TEXT"),
+                        col("tipo","TEXT NOT NULL"),
+                        col("fecha","TEXT NOT NULL"),
+                        col("ubicacion_gps","TEXT"),
+                        col("observaciones","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("persona_id", "REFERENCES personas(id) ON DELETE CASCADE"),
-                        fk("responsable_id", "REFERENCES responsables(id) ON DELETE CASCADE")
+                        fk("persona_id","REFERENCES personas(id) ON DELETE CASCADE"),
+                        fk("responsable_id","REFERENCES responsables(id) ON DELETE CASCADE")
                 ),
                 List.of(
-                        idx("idx_visitas_lm", "last_modified"),
-                        idx("idx_visitas_sd", "sql_deleted"),
-                        idx("idx_visitas_persona", "persona_id"),
-                        idx("idx_visitas_resp", "responsable_id"),
-                        idx("idx_visitas_tipo", "tipo")
+                        idx("idx_visitas_lm","last_modified"),
+                        idx("idx_visitas_sd","sql_deleted"),
+                        idx("idx_visitas_persona","persona_id"),
+                        idx("idx_visitas_resp","responsable_id"),
+                        idx("idx_visitas_tipo","tipo")
                 ),
                 null,
                 selectValuesSec("visitas", List.of(
-                        "id", "persona_id", "responsable_id", "created_by_user_id", "tipo", "fecha", "ubicacion_gps", "observaciones", "last_modified", "sql_deleted"
+                        "id","persona_id","responsable_id","created_by_user_id","tipo","fecha","ubicacion_gps","observaciones","last_modified","sql_deleted"
                 ))
         ));
 
@@ -374,27 +380,27 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "control_domicilio",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("visita_id", "TEXT NOT NULL"),
-                        col("created_by_user_id", "TEXT"),
-                        col("ta_sistolica", "INTEGER"),
-                        col("ta_diastolica", "INTEGER"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("visita_id","TEXT NOT NULL"),
+                        col("created_by_user_id","TEXT"),
+                        col("ta_sistolica","INTEGER"),
+                        col("ta_diastolica","INTEGER"),
                         col("accede_programa", bool("accede_programa")),
                         col("acepta_laboratotio", bool("acepta_laboratotio")),
-                        col("observaciones", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("observaciones","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("visita_id", "REFERENCES visitas(id) ON DELETE CASCADE")
+                        fk("visita_id","REFERENCES visitas(id) ON DELETE CASCADE")
                 ),
                 List.of(
-                        idx("idx_cd_lm", "last_modified"),
-                        idx("idx_cd_sd", "sql_deleted"),
-                        idxUnique("idx_cd_visita", "visita_id")
+                        idx("idx_cd_lm","last_modified"),
+                        idx("idx_cd_sd","sql_deleted"),
+                        idxUnique("idx_cd_visita","visita_id")
                 ),
                 null,
                 selectValuesSec("control_domicilio", List.of(
-                        "id", "visita_id", "created_by_user_id", "ta_sistolica", "ta_diastolica",
-                        "accede_programa", "acepta_laboratotio", "observaciones", "last_modified", "sql_deleted"
+                        "id","visita_id","created_by_user_id","ta_sistolica","ta_diastolica",
+                        "accede_programa","acepta_laboratotio","observaciones","last_modified","sql_deleted"
                 ))
         ));
 
@@ -402,17 +408,17 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "control_consultorio",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("visita_id", "TEXT NOT NULL"),
-                        col("created_by_user_id", "TEXT"),
-                        col("fecha", "TEXT"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("visita_id","TEXT NOT NULL"),
+                        col("created_by_user_id","TEXT"),
+                        col("fecha","TEXT"),
                         col("asistencia", bool("asistencia")),
-                        col("ta_sistolica", "INTEGER"),
-                        col("ta_diastolica", "INTEGER"),
-                        col("peso", "REAL"),
-                        col("talla", "REAL"),
-                        col("imc", "REAL"),
-                        col("circ_cintura", "INTEGER"),
+                        col("ta_sistolica","INTEGER"),
+                        col("ta_diastolica","INTEGER"),
+                        col("peso","REAL"),
+                        col("talla","REAL"),
+                        col("imc","REAL"),
+                        col("circ_cintura","INTEGER"),
                         col("fumador", bool("fumador")),
                         col("confirm_hta", bool("confirm_hta")),
                         col("control_medicacion", bool("control_medicacion")),
@@ -420,38 +426,56 @@ public class SyncController {
                         col("entrega_medicacion", bool("entrega_medicacion")),
                         col("eventos", bool("eventos")),
                         col("conducta", bool("conducta")),
-                        col("medicacion", "TEXT"),
-                        col("observaciones", "TEXT"),
-                        col("observaciones_derivacion", "TEXT"),
-                        col("observaciones_eventos", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("medicacion","TEXT"),
+                        col("observaciones","TEXT"),
+                        col("observaciones_derivacion","TEXT"),
+                        col("observaciones_eventos","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("visita_id", "REFERENCES visitas(id) ON DELETE CASCADE")
+                        fk("visita_id","REFERENCES visitas(id) ON DELETE CASCADE")
                 ),
                 List.of(
-                        idx("idx_cc_lm", "last_modified"),
-                        idx("idx_cc_sd", "sql_deleted"),
-                        idxUnique("idx_cc_visita", "visita_id")
+                        idx("idx_cc_lm","last_modified"),
+                        idx("idx_cc_sd","sql_deleted"),
+                        idxUnique("idx_cc_visita","visita_id")
                 ),
                 null,
                 selectValuesSec("control_consultorio", List.of(
-                        "id", "visita_id", "created_by_user_id", "fecha", "asistencia",
-                        "ta_sistolica", "ta_diastolica", "peso", "talla", "imc",
-                        "circ_cintura", "fumador", "confirm_hta", "control_medicacion", "derivacion",
-                        "entrega_medicacion", "eventos", "conducta",
-                        "medicacion", "observaciones", "observaciones_derivacion", "observaciones_eventos",
-                        "last_modified", "sql_deleted"
+                        "id","visita_id","created_by_user_id","fecha","asistencia",
+                        "ta_sistolica","ta_diastolica","peso","talla","imc",
+                        "circ_cintura","fumador","confirm_hta","control_medicacion","derivacion",
+                        "entrega_medicacion","eventos","conducta",
+                        "medicacion","observaciones","observaciones_derivacion","observaciones_eventos",
+                        "last_modified","sql_deleted"
                 ))
+        ));
+
+        // ---------- medicacion_hta (con LM/SD) ----------
+        tables.add(tableWithSchemaIdxValues(
+                "medicacion_hta",
+                List.of(
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("nombre","TEXT NOT NULL"),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted"))
+                ),
+                List.of(
+                        idx("idx_medhta_nombre","nombre"),
+                        idx("idx_medhta_lm","last_modified"),
+                        idx("idx_medhta_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSec("medicacion_hta", List.of("id","nombre","last_modified","sql_deleted"))
         ));
 
         // ---------- antecedentes ----------
         tables.add(tableWithSchemaIdxValues(
                 "antecedentes",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("persona_id", "TEXT NOT NULL"),
-                        col("visita_id", "TEXT"),
-                        col("created_by_user_id", "TEXT"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("persona_id","TEXT NOT NULL"),
+                        col("visita_id","TEXT"),
+                        col("created_by_user_id","TEXT"),
                         col("diabetes", bool("diabetes")),
                         col("dislipemia", bool("dislipemia")),
                         col("enf_cardiovascular", bool("enf_cardiovascular")),
@@ -463,27 +487,51 @@ public class SyncController {
                         col("tratamiento_enf_dislipemia", bool("tratamiento_enf_dislipemia")),
                         col("tratamiento_enf_renal", bool("tratamiento_enf_renal")),
                         col("tratamiento_hta_previa", bool("tratamiento_hta_previa")),
-                        col("desc_trat_enf_diabetes", "TEXT"),
-                        col("desc_trat_hta_previa", "TEXT"),
-                        col("otros", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("desc_trat_enf_diabetes","TEXT"),
+                        col("desc_trat_hta_previa","TEXT"),
+                        col("otros","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("persona_id", "REFERENCES personas(id) ON DELETE CASCADE"),
-                        fk("visita_id", "REFERENCES visitas(id) ON DELETE SET NULL")
+                        fk("persona_id","REFERENCES personas(id) ON DELETE CASCADE"),
+                        fk("visita_id","REFERENCES visitas(id) ON DELETE SET NULL")
                 ),
                 List.of(
-                        idx("idx_ant_lm", "last_modified"),
-                        idx("idx_ant_sd", "sql_deleted"),
-                        idx("idx_ant_persona", "persona_id")
+                        idx("idx_ant_lm","last_modified"),
+                        idx("idx_ant_sd","sql_deleted"),
+                        idx("idx_ant_persona","persona_id")
                 ),
                 null,
                 selectValuesSec("antecedentes", List.of(
-                        "id", "persona_id", "visita_id", "created_by_user_id",
-                        "diabetes", "dislipemia", "enf_cardiovascular", "enf_renal_cronica", "hta_previa", "tabaquismo",
-                        "tratamiento_enf_cardiovascular", "tratamiento_enf_diabetes", "tratamiento_enf_dislipemia",
-                        "tratamiento_enf_renal", "tratamiento_hta_previa",
-                        "desc_trat_enf_diabetes", "desc_trat_hta_previa",
-                        "otros", "last_modified", "sql_deleted"
+                        "id","persona_id","visita_id","created_by_user_id",
+                        "diabetes","dislipemia","enf_cardiovascular","enf_renal_cronica","hta_previa","tabaquismo",
+                        "tratamiento_enf_cardiovascular","tratamiento_enf_diabetes","tratamiento_enf_dislipemia",
+                        "tratamiento_enf_renal","tratamiento_hta_previa",
+                        "desc_trat_enf_diabetes","desc_trat_hta_previa",
+                        "otros","last_modified","sql_deleted"
+                ))
+        ));
+
+        // ---------- antecedente_has_medicacion_hta (con LM/SD) ----------
+        tables.add(tableWithSchemaIdxValues(
+                "antecedente_has_medicacion_hta",
+                List.of(
+                        col("antecedente_id","TEXT NOT NULL"),
+                        col("medicacion_id","TEXT NOT NULL"),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted")),
+                        fk("antecedente_id","REFERENCES antecedentes(id) ON DELETE CASCADE"),
+                        fk("medicacion_id","REFERENCES medicacion_hta(id) ON DELETE CASCADE")
+                ),
+                List.of(
+                        idxUnique("uk_ant_medhta","antecedente_id,medicacion_id"),
+                        idx("idx_ant_medhta_ant","antecedente_id"),
+                        idx("idx_ant_medhta_med","medicacion_id"),
+                        idx("idx_ant_medhta_lm","last_modified"),
+                        idx("idx_ant_medhta_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSec("antecedente_has_medicacion_hta", List.of(
+                        "antecedente_id","medicacion_id","last_modified","sql_deleted"
                 ))
         ));
 
@@ -491,23 +539,23 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "lab_tipos",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("codigo", "TEXT NOT NULL"),
-                        col("nombre", "TEXT NOT NULL"),
-                        col("unidad_default", "TEXT"),
-                        col("ref_min", "REAL"),
-                        col("ref_max", "REAL"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("codigo","TEXT NOT NULL"),
+                        col("nombre","TEXT NOT NULL"),
+                        col("unidad_default","TEXT"),
+                        col("ref_min","REAL"),
+                        col("ref_max","REAL"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted"))
                 ),
                 List.of(
-                        idxUnique("idx_labtip_codigo", "codigo"),
-                        idx("idx_labtip_lm", "last_modified"),
-                        idx("idx_labtip_sd", "sql_deleted")
+                        idxUnique("idx_labtip_codigo","codigo"),
+                        idx("idx_labtip_lm","last_modified"),
+                        idx("idx_labtip_sd","sql_deleted")
                 ),
                 null,
                 selectValuesSec("lab_tipos", List.of(
-                        "id", "codigo", "nombre", "unidad_default", "ref_min", "ref_max", "last_modified", "sql_deleted"
+                        "id","codigo","nombre","unidad_default","ref_min","ref_max","last_modified","sql_deleted"
                 ))
         ));
 
@@ -515,33 +563,33 @@ public class SyncController {
         tables.add(tableWithSchemaIdxValues(
                 "lab_resultados",
                 List.of(
-                        col("id", "TEXT PRIMARY KEY NOT NULL"),
-                        col("persona_id", "TEXT NOT NULL"),
-                        col("visita_id", "TEXT"),
-                        col("tipo_id", "TEXT NOT NULL"),
-                        col("created_by_user_id", "TEXT"),
-                        col("fecha_realizado", "TEXT NOT NULL"),
-                        col("valor_num", "REAL"),
-                        col("valor_texto", "TEXT"),
-                        col("unidad", "TEXT"),
-                        col("laboratorio", "TEXT"),
-                        col("observaciones", "TEXT"),
-                        col("last_modified", "INTEGER NOT NULL"),
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("persona_id","TEXT NOT NULL"),
+                        col("visita_id","TEXT"),
+                        col("tipo_id","TEXT NOT NULL"),
+                        col("created_by_user_id","TEXT"),
+                        col("fecha_realizado","TEXT NOT NULL"),
+                        col("valor_num","REAL"),
+                        col("valor_texto","TEXT"),
+                        col("unidad","TEXT"),
+                        col("laboratorio","TEXT"),
+                        col("observaciones","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
-                        fk("persona_id", "REFERENCES personas(id) ON DELETE CASCADE"),
-                        fk("visita_id", "REFERENCES visitas(id) ON DELETE SET NULL"),
-                        fk("tipo_id", "REFERENCES lab_tipos(id) ON DELETE RESTRICT")
+                        fk("persona_id","REFERENCES personas(id) ON DELETE CASCADE"),
+                        fk("visita_id","REFERENCES visitas(id) ON DELETE SET NULL"),
+                        fk("tipo_id","REFERENCES lab_tipos(id) ON DELETE RESTRICT")
                 ),
                 List.of(
-                        idx("idx_lr_lm", "last_modified"),
-                        idx("idx_lr_sd", "sql_deleted"),
-                        idx("idx_lr_persona", "persona_id"),
-                        idx("idx_lr_tipo", "tipo_id")
+                        idx("idx_lr_lm","last_modified"),
+                        idx("idx_lr_sd","sql_deleted"),
+                        idx("idx_lr_persona","persona_id"),
+                        idx("idx_lr_tipo","tipo_id")
                 ),
                 null,
                 selectValuesSec("lab_resultados", List.of(
-                        "id", "persona_id", "visita_id", "tipo_id", "created_by_user_id", "fecha_realizado",
-                        "valor_num", "valor_texto", "unidad", "laboratorio", "observaciones", "last_modified", "sql_deleted"
+                        "id","persona_id","visita_id","tipo_id","created_by_user_id","fecha_realizado",
+                        "valor_num","valor_texto","unidad","laboratorio","observaciones","last_modified","sql_deleted"
                 ))
         ));
 
@@ -568,9 +616,6 @@ public class SyncController {
         }
     }
 
-    /**
-     * Columnas físicas en orden (ORDINAL_POSITION) si no hay MOBILE_COLS
-     */
     private List<String> getTableColumns(String table) throws SQLException {
         List<String> cols = new ArrayList<>();
         try (Connection c = Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
@@ -587,19 +632,20 @@ public class SyncController {
         return cols;
     }
 
-    private static class Col {
-        final String name;
-        final int pos;
+    private static class Col { final String name; final int pos; Col(String n,int p){name=n;pos=p;} }
 
-        Col(String n, int p) {
-            name = n;
-            pos = p;
+    /* ---------- PK helpers (simple/compuesta) ---------- */
+
+    private Map<String, Object> findByPk(String table, List<String> pkCols, List<Object> pkVals) {
+        String where = "";
+        List<Object> args = new ArrayList<>();
+        for (int i = 0; i < pkCols.size(); i++) {
+            if (i > 0) where += " AND ";
+            where += pkCols.get(i) + " = ?";
+            args.add(pkVals.get(i));
         }
-    }
-
-    private Map<String, Object> findById(String table, String pkCol, Object idVal) {
         List<Map<String, Object>> list = jdbc.queryForList(
-                "SELECT * FROM " + table + " WHERE " + pkCol + " = ? LIMIT 1", idVal);
+                "SELECT * FROM " + table + " WHERE " + where + " LIMIT 1", args.toArray());
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -611,22 +657,26 @@ public class SyncController {
         jdbc.update(sql, args);
     }
 
-    private void updateRow(String table, Map<String, Object> row, String pkCol, Object idVal) {
-        Integer n = jdbc.queryForObject("SELECT COUNT(1) FROM " + table + " WHERE " + pkCol + " = ?",
-                Integer.class, idVal);
-        if (n == null || n == 0) {
-            insertRow(table, row);
-            return;
+    private void updateRow(String table, Map<String, Object> row, List<String> pkCols, List<Object> pkVals) {
+        String where = "";
+        List<Object> whereArgs = new ArrayList<>();
+        for (int i = 0; i < pkCols.size(); i++) {
+            if (i > 0) where += " AND ";
+            where += pkCols.get(i) + " = ?";
+            whereArgs.add(pkVals.get(i));
         }
+        Integer n = jdbc.queryForObject("SELECT COUNT(1) FROM " + table + " WHERE " + where, Integer.class, whereArgs.toArray());
+        if (n == null || n == 0) { insertRow(table, row); return; }
 
         List<String> cols = new ArrayList<>(row.keySet());
-        cols.remove(pkCol);
+        cols.removeAll(pkCols);
         if (cols.isEmpty()) return;
 
         String set = cols.stream().map(c -> c + "=?").collect(Collectors.joining(","));
-        String sql = "UPDATE " + table + " SET " + set + " WHERE " + pkCol + " = ?";
         List<Object> args = cols.stream().map(row::get).collect(Collectors.toCollection(ArrayList::new));
-        args.add(idVal);
+        args.addAll(pkVals);
+
+        String sql = "UPDATE " + table + " SET " + set + " WHERE " + where;
         jdbc.update(sql, args.toArray());
     }
 
@@ -657,28 +707,46 @@ public class SyncController {
         }
     }
 
+    private boolean isBooleanishColumn(String c) {
+        String s = c.toLowerCase(Locale.ROOT);
+        return s.equals("sql_deleted") ||
+                s.equals("asistencia") ||
+                s.equals("accede_programa") ||
+                s.equals("acepta_laboratotio") ||
+                s.equals("fumador") ||
+                s.equals("confirm_hta") ||
+                s.equals("control_medicacion") ||
+                s.equals("derivacion") ||
+                s.equals("entrega_medicacion") ||
+                s.equals("eventos") ||
+                s.equals("conducta") ||
+                s.equals("diabetes") ||
+                s.equals("dislipemia") ||
+                s.equals("enf_cardiovascular") ||
+                s.equals("enf_renal_cronica") ||
+                s.equals("hta_previa") ||
+                s.equals("tabaquismo") ||
+                s.equals("tratamiento_enf_cardiovascular") ||
+                s.equals("tratamiento_enf_diabetes") ||
+                s.equals("tratamiento_enf_dislipemia") ||
+                s.equals("tratamiento_enf_renal") ||
+                s.equals("tratamiento_hta_previa");
+    }
+
     private Object boolAsInt(Object v) {
         if (v == null) return null;
         if (v instanceof Number n) return (n.intValue() != 0) ? 1 : 0;
         String s = String.valueOf(v).trim().toLowerCase();
         if ("true".equals(s) || "1".equals(s)) return 1;
         if ("false".equals(s) || "0".equals(s) || s.isEmpty()) return 0;
-        return v; // fallback
+        return v;
     }
 
     /* ---------------- pull-full helpers ---------------- */
 
-    private String bool0(String col) {
-        return "INTEGER DEFAULT 0 CHECK (" + col + " IN (0, 1))";
-    }
-
-    private String bool1(String col) {
-        return "INTEGER DEFAULT 1 CHECK (" + col + " IN (0, 1))";
-    }
-
-    private String bool(String col) {
-        return "INTEGER CHECK (" + col + " IN (0, 1))";
-    }
+    private String bool0(String col) { return "INTEGER DEFAULT 0 CHECK (" + col + " IN (0, 1))"; }
+    private String bool1(String col) { return "INTEGER DEFAULT 1 CHECK (" + col + " IN (0, 1))"; }
+    private String bool(String col)  { return "INTEGER CHECK (" + col + " IN (0, 1))"; }
 
     private Map<String, Object> col(String name, String ddl) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -707,14 +775,11 @@ public class SyncController {
         return m;
     }
 
-    /**
-     * Construye {name, schema, indexes, values}
-     */
     private Map<String, Object> tableWithSchemaIdxValues(
             String tableName,
             List<Map<String, Object>> schema,
             List<Map<String, Object>> indexes,
-            List<Map<String, Object>> triggersOrExtras, // reservado
+            List<Map<String, Object>> triggersOrExtras,
             List<List<Object>> values
     ) {
         Map<String, Object> t = new LinkedHashMap<>();
@@ -725,9 +790,6 @@ public class SyncController {
         return t;
     }
 
-    /**
-     * Devuelve values en orden de columnas indicado, normalizando booleans→0/1 y last_modified→segundos
-     */
     private List<List<Object>> selectValuesSec(String table, List<String> cols) {
         String sql = "SELECT " + String.join(",", cols) + " FROM " + table;
         List<Map<String, Object>> rows = jdbc.queryForList(sql);
@@ -740,29 +802,7 @@ public class SyncController {
                     v = b ? 1 : 0;
                 } else if ("last_modified".equalsIgnoreCase(c)) {
                     v = toEpochSeconds(v);
-                } else if ("sql_deleted".equalsIgnoreCase(c)
-                        || "asistencia".equalsIgnoreCase(c)
-                        || "accede_programa".equalsIgnoreCase(c)
-                        || "acepta_laboratotio".equalsIgnoreCase(c)
-                        || "fumador".equalsIgnoreCase(c)
-                        || "confirm_hta".equalsIgnoreCase(c)
-                        || "control_medicacion".equalsIgnoreCase(c)
-                        || "derivacion".equalsIgnoreCase(c)
-                        || "entrega_medicacion".equalsIgnoreCase(c)
-                        || "eventos".equalsIgnoreCase(c)
-                        || "conducta".equalsIgnoreCase(c)
-                        || "diabetes".equalsIgnoreCase(c)
-                        || "dislipemia".equalsIgnoreCase(c)
-                        || "enf_cardiovascular".equalsIgnoreCase(c)
-                        || "enf_renal_cronica".equalsIgnoreCase(c)
-                        || "hta_previa".equalsIgnoreCase(c)
-                        || "tabaquismo".equalsIgnoreCase(c)
-                        || "tratamiento_enf_cardiovascular".equalsIgnoreCase(c)
-                        || "tratamiento_enf_diabetes".equalsIgnoreCase(c)
-                        || "tratamiento_enf_dislipemia".equalsIgnoreCase(c)
-                        || "tratamiento_enf_renal".equalsIgnoreCase(c)
-                        || "tratamiento_hta_previa".equalsIgnoreCase(c)
-                ) {
+                } else if (isBooleanishColumn(c)) {
                     v = boolAsInt(v);
                 }
                 arr.add(v);

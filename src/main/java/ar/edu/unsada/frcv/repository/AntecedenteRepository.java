@@ -9,4 +9,5 @@ public interface AntecedenteRepository extends CrudRepository<Antecedente, Strin
     Iterable<Antecedente> findBySqlDeletedFalse();
     Iterable<Antecedente> findByPersonaAndSqlDeletedFalse(Persona persona);
     //Iterable<Antecedente> findByPersonaIdAndCurrentTrueAndSqlDeletedFalse(String personaId);
+
 }
