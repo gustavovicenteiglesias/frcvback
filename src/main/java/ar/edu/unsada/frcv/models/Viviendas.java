@@ -1,5 +1,6 @@
 package ar.edu.unsada.frcv.models;
 
+import ar.edu.unsada.frcv.models.enums.EstadoAcceso;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
@@ -32,6 +33,11 @@ public class Viviendas extends BaseEntity{
 
     @Column(name="accedio", columnDefinition = "TINYINT(1)")
     private Boolean accedio;
+
+    // ⬇️ nuevo campo enum
+    @Enumerated(EnumType.STRING)
+    @Column(name = "motivo", length = 16) // valores: ACCEDIO, AUSENTE, RECHAZO, NO_APLICA
+    private EstadoAcceso motivo;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "caps_id")

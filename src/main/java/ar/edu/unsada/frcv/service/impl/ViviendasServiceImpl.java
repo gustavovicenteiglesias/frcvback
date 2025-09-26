@@ -67,6 +67,7 @@ public class ViviendasServiceImpl implements ViviendasService {
         db.setManzana(v.getManzana());
         db.setCasa(v.getCasa());
         db.setAccedio(v.getAccedio());
+        db.setMotivo(v.getMotivo());
         db.setLastModified(Instant.now().toEpochMilli());
 
         return viviendasRepository.save(db) ;

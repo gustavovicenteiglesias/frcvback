@@ -45,7 +45,7 @@ public class SyncController {
         put("barrios", List.of("id","nombre","last_modified","sql_deleted"));
         put("caps", List.of("id","nombre","last_modified","sql_deleted"));
         put("viviendas", List.of(
-                "id","barrios_id","caps_id","fecha","accedio","casa","manzana",
+                "id","barrios_id","caps_id","fecha","accedio","motivo","casa","manzana",
                 "latitud","longitud","direccion","last_modified","sql_deleted"
         ));
         put("personas", List.of(
@@ -277,14 +277,15 @@ public class SyncController {
                         col("barrios_id","TEXT"),
                         col("caps_id","TEXT"),
                         col("fecha","TEXT"),
-                        col("accedio", bool("accedio")),
+                        col("accedio",        bool("accedio")),
+                        col("motivo",         "TEXT"), // enum como texto
                         col("casa","TEXT"),
                         col("manzana","TEXT"),
                         col("latitud","TEXT"),
                         col("longitud","TEXT"),
                         col("direccion","TEXT"),
                         col("last_modified","INTEGER NOT NULL"),
-                        col("sql_deleted", bool0("sql_deleted")),
+                        col("sql_deleted",    bool0("sql_deleted")),
                         fk("barrios_id","REFERENCES barrios(id) ON DELETE SET NULL"),
                         fk("caps_id","REFERENCES caps(id) ON DELETE SET NULL")
                 ),
@@ -296,10 +297,11 @@ public class SyncController {
                 ),
                 null,
                 selectValuesSec("viviendas", List.of(
-                        "id","barrios_id","caps_id","fecha","accedio","casa","manzana",
+                        "id","barrios_id","caps_id","fecha","accedio","motivo","casa","manzana",
                         "latitud","longitud","direccion","last_modified","sql_deleted"
                 ))
         ));
+
 
         // ---------- personas ----------
         tables.add(tableWithSchemaIdxValues(
