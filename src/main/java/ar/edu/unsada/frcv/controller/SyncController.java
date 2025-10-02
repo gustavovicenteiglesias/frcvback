@@ -77,7 +77,8 @@ public class SyncController {
                 "diabetes","dislipemia","enf_cardiovascular","enf_renal_cronica","hta_previa","tabaquismo",
                 "tratamiento_enf_cardiovascular","tratamiento_enf_diabetes","tratamiento_enf_dislipemia",
                 "tratamiento_enf_renal","tratamiento_hta_previa",
-                "desc_trat_enf_diabetes","desc_trat_hta_previa",
+                "desc_trat_enf_diabetes","desc_trat_hta_previa","desc_trat_enf_cardiovascular","desc_trat_enf_dislipemia",
+                "desc_trat_enf_renal",
                 "otros","last_modified","sql_deleted"
         ));
         put("lab_tipos", List.of(
@@ -489,6 +490,9 @@ public class SyncController {
                         col("tratamiento_enf_dislipemia", bool("tratamiento_enf_dislipemia")),
                         col("tratamiento_enf_renal", bool("tratamiento_enf_renal")),
                         col("tratamiento_hta_previa", bool("tratamiento_hta_previa")),
+                        col("desc_trat_enf_cardiovascular","TEXT"),
+                        col("desc_trat_enf_dislipemia","TEXT"),
+                        col("desc_trat_enf_renal" ,"TEXT"),
                         col("desc_trat_enf_diabetes","TEXT"),
                         col("desc_trat_hta_previa","TEXT"),
                         col("otros","TEXT"),
@@ -507,7 +511,8 @@ public class SyncController {
                         "id","persona_id","visita_id","created_by_user_id",
                         "diabetes","dislipemia","enf_cardiovascular","enf_renal_cronica","hta_previa","tabaquismo",
                         "tratamiento_enf_cardiovascular","tratamiento_enf_diabetes","tratamiento_enf_dislipemia",
-                        "tratamiento_enf_renal","tratamiento_hta_previa",
+                        "tratamiento_enf_renal","tratamiento_hta_previa","desc_trat_enf_cardiovascular","desc_trat_enf_dislipemia",
+                        "desc_trat_enf_renal",
                         "desc_trat_enf_diabetes","desc_trat_hta_previa",
                         "otros","last_modified","sql_deleted"
                 ))

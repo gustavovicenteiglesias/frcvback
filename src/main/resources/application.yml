@@ -2,12 +2,12 @@ server:
   port: 8089
 spring:
   datasource:
-    url: jdbc:mysql://cfl401areco.edu.ar:3306/frcv2?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://areco.gob.ar:3306/frcv2?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
     username: frcv
     password: frcv2025*+
   jpa:
     hibernate:
-      ddl-auto: update # no crea tablas, Flyway se encarga
+      ddl-auto: none # no crea tablas, Flyway se encarga
     open-in-view: false
     show-sql: true
 
