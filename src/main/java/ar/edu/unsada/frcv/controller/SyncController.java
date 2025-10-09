@@ -1,5 +1,6 @@
 package ar.edu.unsada.frcv.controller;
 
+import jakarta.transaction.Transactional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -167,15 +168,17 @@ public class SyncController {
     }
 
     /* ===========================
-       PUSH (parcial, upsert por last_modified)
-       =========================== */
+   PUSH (parcial, upsert por last_modified)
+   =========================== */
     @PostMapping("/push")
+    @Transactional
     public ResponseEntity<Map<String, Object>> push(@RequestBody Map<String, Object> partial) throws Exception {
         Object tablesObj = partial.get("tables");
         if (!(tablesObj instanceof List<?> rawTables)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Formato inválido: falta 'tables'"));
         }
 
+        // name -> rows(values[])
         Map<String, List<List<Object>>> incoming = new HashMap<>();
         for (Object o : rawTables) {
             if (!(o instanceof Map<?, ?> tm)) continue;
@@ -193,6 +196,9 @@ public class SyncController {
 
         int applied = 0, skipped = 0;
 
+        // Para cascada targeteada: personas que quedaron con sql_deleted=1 tras este push
+        final Set<String> personasMarcadasBaja = new HashSet<>();
+
         for (String table : TABLE_ORDER) {
             if (!incoming.containsKey(table) || !tableExists(table)) continue;
 
@@ -203,6 +209,15 @@ public class SyncController {
             for (List<Object> rowArr : incoming.get(table)) {
                 Map<String, Object> row = zipRow(cols, rowArr);
 
+                // Normalizaciones
+                for (String c : cols) {
+                    Object v = row.get(c);
+                    if (v instanceof Boolean b) row.put(c, b ? 1 : 0);
+                    if (LM.equalsIgnoreCase(c)) row.put(c, toEpochSeconds(v));
+                    if (isBooleanishColumn(c)) row.put(c, boolAsInt(v));
+                }
+
+                // PKs presentes
                 List<Object> pkVals = new ArrayList<>(pkCols.size());
                 boolean missingPk = false;
                 for (String pkCol : pkCols) {
@@ -213,6 +228,7 @@ public class SyncController {
                 if (missingPk) { skipped++; continue; }
 
                 Map<String, Object> existing = findByPk(table, pkCols, pkVals);
+
                 if (existing == null) {
                     insertRow(table, row);
                     applied++;
@@ -229,11 +245,97 @@ public class SyncController {
                         skipped++;
                     }
                 }
+
+                // Si estamos procesando PERSONAS, registrar las que quedan en baja lógica (=1)
+                if ("personas".equals(table)) {
+                    Object id = row.getOrDefault("id", null);
+                    Object sd = row.getOrDefault("sql_deleted", 0);
+                    if (id != null && Objects.equals(boolAsInt(sd), 1)) {
+                        personasMarcadasBaja.add(String.valueOf(id));
+                    }
+                }
             }
         }
 
-        return ResponseEntity.ok(Map.of("applied", applied, "skipped", skipped));
+        // Cascada de baja lógica SOLO para las personas marcadas en este push
+        Map<String, Integer> cascaded = personasMarcadasBaja.isEmpty()
+                ? Map.of("visitas", 0, "control_domicilio", 0, "control_consultorio", 0,
+                "antecedentes", 0, "antecedente_has_medicacion_hta", 0, "lab_resultados", 0)
+                : cascadeSoftDeleteForPersonas(personasMarcadasBaja);
+
+        return ResponseEntity.ok(Map.of(
+                "applied", applied,
+                "skipped", skipped,
+                "cascade_soft_deleted", cascaded,
+                "personas_borradas", personasMarcadasBaja.size()
+        ));
     }
+
+    /* ===== Helpers específicos de este push ===== */
+
+    private long nowSec() { return Instant.now().getEpochSecond(); }
+
+    /**
+     * Propaga sql_deleted = 1 desde PERSONAS a TODAS las tablas hijas/nietas,
+     * limitando la cascada al conjunto recibido. Idempotente.
+     */
+    private Map<String, Integer> cascadeSoftDeleteForPersonas(Set<String> personaIds) {
+        long now = nowSec();
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (personaIds == null || personaIds.isEmpty()) return out;
+
+        // Helpers para IN (?, ?, ?)
+        String placeholders = personaIds.stream().map(x -> "?").collect(Collectors.joining(","));
+        List<Object> args = new ArrayList<>(personaIds);
+
+        // 1) visitas de personas borradas
+        List<Object> argsV = new ArrayList<>();
+        argsV.add(now);
+        argsV.addAll(args);
+        int v = jdbc.update(
+                "UPDATE visitas SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND persona_id IN (" + placeholders + ")", argsV.toArray());
+        out.put("visitas", v);
+
+        // 2) control_domicilio
+        int cd = jdbc.update(
+                "UPDATE control_domicilio SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE sql_deleted = 1)", now);
+        out.put("control_domicilio", cd);
+
+        // 3) control_consultorio
+        int cc = jdbc.update(
+                "UPDATE control_consultorio SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE sql_deleted = 1)", now);
+        out.put("control_consultorio", cc);
+
+        // 4) antecedentes
+        List<Object> argsA = new ArrayList<>();
+        argsA.add(now);
+        argsA.addAll(args);
+        int ant = jdbc.update(
+                "UPDATE antecedentes SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND persona_id IN (" + placeholders + ")", argsA.toArray());
+        out.put("antecedentes", ant);
+
+        // 5) puente antecedente_has_medicacion_hta
+        int am = jdbc.update(
+                "UPDATE antecedente_has_medicacion_hta SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND antecedente_id IN (SELECT id FROM antecedentes WHERE sql_deleted = 1)", now);
+        out.put("antecedente_has_medicacion_hta", am);
+
+        // 6) lab_resultados
+        List<Object> argsL = new ArrayList<>();
+        argsL.add(now);
+        argsL.addAll(args);
+        int lr = jdbc.update(
+                "UPDATE lab_resultados SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND persona_id IN (" + placeholders + ")", argsL.toArray());
+        out.put("lab_resultados", lr);
+
+        return out;
+    }
+
 
     /* ===========================
        PULL-FULL (schema + indexes + values)
@@ -374,10 +476,18 @@ public class SyncController {
                         idx("idx_visitas_tipo","tipo")
                 ),
                 null,
-                selectValuesSec("visitas", List.of(
-                        "id","persona_id","responsable_id","created_by_user_id","tipo","fecha","ubicacion_gps","observaciones","last_modified","sql_deleted"
+                selectValuesSecSql("""
+      SELECT v.id, v.persona_id, v.responsable_id, v.created_by_user_id, v.tipo, v.fecha,
+             v.ubicacion_gps, v.observaciones, v.last_modified, v.sql_deleted
+      FROM visitas v
+      JOIN personas p ON p.id = v.persona_id AND p.sql_deleted = 0
+      WHERE v.sql_deleted IN (0,1)
+    """, List.of(
+                        "id","persona_id","responsable_id","created_by_user_id","tipo","fecha",
+                        "ubicacion_gps","observaciones","last_modified","sql_deleted"
                 ))
         ));
+
 
         // ---------- control_domicilio ----------
         tables.add(tableWithSchemaIdxValues(
@@ -401,11 +511,19 @@ public class SyncController {
                         idxUnique("idx_cd_visita","visita_id")
                 ),
                 null,
-                selectValuesSec("control_domicilio", List.of(
+                selectValuesSecSql("""
+      SELECT cd.id, cd.visita_id, cd.created_by_user_id, cd.ta_sistolica, cd.ta_diastolica,
+             cd.accede_programa, cd.acepta_laboratotio, cd.observaciones, cd.last_modified, cd.sql_deleted
+      FROM control_domicilio cd
+      JOIN visitas v   ON v.id = cd.visita_id    AND v.sql_deleted IN (0,1)
+      JOIN personas p  ON p.id = v.persona_id    AND p.sql_deleted = 0
+      WHERE cd.sql_deleted IN (0,1)
+    """, List.of(
                         "id","visita_id","created_by_user_id","ta_sistolica","ta_diastolica",
                         "accede_programa","acepta_laboratotio","observaciones","last_modified","sql_deleted"
                 ))
         ));
+
 
         // ---------- control_consultorio ----------
         tables.add(tableWithSchemaIdxValues(
@@ -443,7 +561,18 @@ public class SyncController {
                         idxUnique("idx_cc_visita","visita_id")
                 ),
                 null,
-                selectValuesSec("control_consultorio", List.of(
+                selectValuesSecSql("""
+      SELECT cc.id, cc.visita_id, cc.created_by_user_id, cc.fecha, cc.asistencia,
+             cc.ta_sistolica, cc.ta_diastolica, cc.peso, cc.talla, cc.imc,
+             cc.circ_cintura, cc.fumador, cc.confirm_hta, cc.control_medicacion,
+             cc.derivacion, cc.entrega_medicacion, cc.eventos, cc.conducta,
+             cc.medicacion, cc.observaciones, cc.observaciones_derivacion, cc.observaciones_eventos,
+             cc.last_modified, cc.sql_deleted
+      FROM control_consultorio cc
+      JOIN visitas v   ON v.id = cc.visita_id    AND v.sql_deleted IN (0,1)
+      JOIN personas p  ON p.id = v.persona_id    AND p.sql_deleted = 0
+      WHERE cc.sql_deleted IN (0,1)
+    """, List.of(
                         "id","visita_id","created_by_user_id","fecha","asistencia",
                         "ta_sistolica","ta_diastolica","peso","talla","imc",
                         "circ_cintura","fumador","confirm_hta","control_medicacion","derivacion",
@@ -507,18 +636,30 @@ public class SyncController {
                         idx("idx_ant_persona","persona_id")
                 ),
                 null,
-                selectValuesSec("antecedentes", List.of(
+                selectValuesSecSql("""
+      SELECT a.id, a.persona_id, a.visita_id, a.created_by_user_id,
+             a.diabetes, a.dislipemia, a.enf_cardiovascular, a.enf_renal_cronica, a.hta_previa, a.tabaquismo,
+             a.tratamiento_enf_cardiovascular, a.tratamiento_enf_diabetes, a.tratamiento_enf_dislipemia,
+             a.tratamiento_enf_renal, a.tratamiento_hta_previa,
+             a.desc_trat_enf_cardiovascular, a.desc_trat_enf_dislipemia, a.desc_trat_enf_renal,
+             a.desc_trat_enf_diabetes, a.desc_trat_hta_previa, a.otros,
+             a.last_modified, a.sql_deleted
+      FROM antecedentes a
+      JOIN personas p ON p.id = a.persona_id AND p.sql_deleted = 0
+      WHERE a.sql_deleted IN (0,1)
+    """, List.of(
                         "id","persona_id","visita_id","created_by_user_id",
                         "diabetes","dislipemia","enf_cardiovascular","enf_renal_cronica","hta_previa","tabaquismo",
                         "tratamiento_enf_cardiovascular","tratamiento_enf_diabetes","tratamiento_enf_dislipemia",
-                        "tratamiento_enf_renal","tratamiento_hta_previa","desc_trat_enf_cardiovascular","desc_trat_enf_dislipemia",
-                        "desc_trat_enf_renal",
+                        "tratamiento_enf_renal","tratamiento_hta_previa",
+                        "desc_trat_enf_cardiovascular","desc_trat_enf_dislipemia","desc_trat_enf_renal",
                         "desc_trat_enf_diabetes","desc_trat_hta_previa",
                         "otros","last_modified","sql_deleted"
                 ))
         ));
 
-        // ---------- antecedente_has_medicacion_hta (con LM/SD) ----------
+
+        // ---------- antecedente_has_medicacion_hta ----------
         tables.add(tableWithSchemaIdxValues(
                 "antecedente_has_medicacion_hta",
                 List.of(
@@ -536,7 +677,7 @@ public class SyncController {
                         idx("idx_ant_medhta_lm","last_modified"),
                         idx("idx_ant_medhta_sd","sql_deleted")
                 ),
-                List.of( // <<--- TRIGGER CORRECTO
+                List.of(
                         trigger(
                                 "antecedente_has_medicacion_hta_trigger_last_modified",
                                 "CREATE TRIGGER IF NOT EXISTS antecedente_has_medicacion_hta_trigger_last_modified " +
@@ -550,10 +691,18 @@ public class SyncController {
                                         "END;"
                         )
                 ),
-                selectValuesSec("antecedente_has_medicacion_hta", List.of(
+                selectValuesSecSql("""
+      SELECT am.antecedente_id, am.medicacion_id, am.last_modified, am.sql_deleted
+      FROM antecedente_has_medicacion_hta am
+      JOIN antecedentes a ON a.id = am.antecedente_id AND a.sql_deleted IN (0,1)
+      JOIN personas    p ON p.id = a.persona_id    AND p.sql_deleted = 0
+      JOIN medicacion_hta m ON m.id = am.medicacion_id AND m.sql_deleted = 0
+      WHERE am.sql_deleted IN (0,1)
+    """, List.of(
                         "antecedente_id","medicacion_id","last_modified","sql_deleted"
                 ))
         ));
+
 
         // ---------- lab_tipos ----------
         tables.add(tableWithSchemaIdxValues(
@@ -607,11 +756,22 @@ public class SyncController {
                         idx("idx_lr_tipo","tipo_id")
                 ),
                 null,
-                selectValuesSec("lab_resultados", List.of(
+                selectValuesSecSql("""
+      SELECT lr.id, lr.persona_id, lr.visita_id, lr.tipo_id, lr.created_by_user_id, lr.fecha_realizado,
+             lr.valor_num, lr.valor_texto, lr.unidad, lr.laboratorio, lr.observaciones,
+             lr.last_modified, lr.sql_deleted
+      FROM lab_resultados lr
+      JOIN personas p ON p.id = lr.persona_id AND p.sql_deleted = 0
+      JOIN lab_tipos t ON t.id = lr.tipo_id AND t.sql_deleted IN (0,1)
+      LEFT JOIN visitas v ON v.id = lr.visita_id
+      WHERE lr.sql_deleted IN (0,1)
+        AND (lr.visita_id IS NULL OR v.sql_deleted IN (0,1))
+    """, List.of(
                         "id","persona_id","visita_id","tipo_id","created_by_user_id","fecha_realizado",
                         "valor_num","valor_texto","unidad","laboratorio","observaciones","last_modified","sql_deleted"
                 ))
         ));
+
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("database", "frcv");
@@ -838,4 +998,27 @@ public class SyncController {
         }
         return values;
     }
+    private List<List<Object>> selectValuesSecSql(String sql, List<String> cols, Object... params) {
+        List<Map<String, Object>> rows = (params == null || params.length == 0)
+                ? jdbc.queryForList(sql)
+                : jdbc.queryForList(sql, params);
+        List<List<Object>> values = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            List<Object> arr = new ArrayList<>(cols.size());
+            for (String c : cols) {
+                Object v = r.get(c);
+                if (v instanceof Boolean b) {
+                    v = b ? 1 : 0;
+                } else if ("last_modified".equalsIgnoreCase(c)) {
+                    v = toEpochSeconds(v);
+                } else if (isBooleanishColumn(c)) {
+                    v = boolAsInt(v);
+                }
+                arr.add(v);
+            }
+            values.add(arr);
+        }
+        return values;
+    }
+
 }
