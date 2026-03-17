@@ -51,4 +51,8 @@ public class PersonaServiceImpl implements PersonaService {
         db.setLastModified(Instant.now().toEpochMilli());
         repo.save(db);
     }
+    @Override
+    public long countActive() {       // 👈 implementación
+        return repo.countBySqlDeletedFalse();
+    }
 }

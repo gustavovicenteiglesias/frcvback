@@ -10,4 +10,5 @@ public interface PersonaService {
     Persona create(Persona p);
     Persona update(String id, Persona p);
     void delete(String id); // soft
+    long countActive();
 }

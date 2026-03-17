@@ -7,4 +7,5 @@ import org.springframework.data.repository.CrudRepository;
 public interface PersonaRepository extends CrudRepository<Persona, String> {
     Iterable<Persona> findBySqlDeletedFalse();
     boolean existsByDniAndSqlDeletedFalse(String dni);
+    long countBySqlDeletedFalse();
 }

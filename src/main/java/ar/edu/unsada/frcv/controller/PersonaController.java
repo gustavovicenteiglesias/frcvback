@@ -21,6 +21,10 @@ public class PersonaController {
     public ResponseEntity<Persona> get(@PathVariable String id) {
         return service.get(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
+    @GetMapping("/count")   // 👈 nuevo
+    public ResponseEntity<Long> count() {
+        return ResponseEntity.ok(service.countActive());
+    }
 
     @PostMapping
     public ResponseEntity<Persona> create(@Valid @RequestBody Persona p) {
