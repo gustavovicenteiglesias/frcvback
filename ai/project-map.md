@@ -1,15 +1,69 @@
 # MAPA DEL PROYECTO
 
-## Directorios Principales
-[Directorio Raíz]/
- ├─ [Carpeta 1]/ (Ej: src/ - Código fuente principal)
- ├─ [Carpeta 2]/ (Ej: public/ - Activos estáticos)
- └─ [Carpeta 3]/ (Ej: docs/ - Documentación extra)
+## Backend
 
-## Archivos y Componentes Clave
-- `archivo_principal.ext`: [Para qué sirve y por qué es importante]
-- `configuracion.ext`: [Qué controla]
+src/main/java/ar/edu/unsada/frcv/
 
-## Restricciones de Navegación
-- Mantener la separación de responsabilidades establecida.
-- No alterar la estructura de carpetas base sin consultar.
+### Modelos
+- models/ControlConsultorio.java
+
+### Controllers
+- controller/ControlConsultorioController.java
+- controller/SyncController.java
+
+### Services
+- service/ControlConsultorioService.java
+- service/impl/ControlConsultorioServiceImpl.java
+
+### Repositories
+- repository/ControlConsultorioRepository.java
+
+---
+
+## Frontend
+
+appfrcv-vite/src/
+
+### Base local
+- data/db.ts
+
+### Sync
+- data/sync.ts
+
+### UI
+- pages/ (pantallas)
+- components/ (componentes)
+
+---
+
+## Archivos críticos
+
+### db.ts
+Define esquema SQLite
+
+### sync.ts
+Define sincronización
+
+### SyncController
+Orquesta sync backend
+
+---
+
+## Nuevos archivos esperados
+
+### Backend
+- MotivoNoMedicacion.java
+- EventoConsultorio.java
+- DerivacionConsultorio.java
+
+### Repositories
+- MotivoNoMedicacionRepository
+- EventoConsultorioRepository
+- DerivacionConsultorioRepository
+
+---
+
+## Restricciones
+
+- No escanear todo el proyecto
+- Usar este mapa como referencia

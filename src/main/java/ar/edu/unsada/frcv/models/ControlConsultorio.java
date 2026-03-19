@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "control_consultorio",
@@ -77,5 +79,15 @@ public class ControlConsultorio extends BaseEntity {
     @Column(name = "medicacion", columnDefinition = "text")
     private String medicacion;
 
+    // Nuevos modelos relacionales
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "motivo_no_medicacion_id")
+    private MotivoNoMedicacion motivoNoMedicacion;
+
+    @OneToMany(mappedBy = "controlConsultorio", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ControlConsultorioEvento> eventosConsultorio = new ArrayList<>();
+
+    @OneToMany(mappedBy = "controlConsultorio", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ControlConsultorioDerivacion> derivacionesConsultorio = new ArrayList<>();
 
 }

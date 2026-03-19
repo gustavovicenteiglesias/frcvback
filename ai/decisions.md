@@ -1,11 +1,80 @@
 # DECISIONES DE ARQUITECTURA Y DISEÑO
 
-## UI y Estilos
-1. Framework visual principal: [Ej: Material UI, Bootstrap, CSS Custom, etc.]
-2. Restricciones visuales: [Ej: No usar Tailwind, mantener paleta institucional, etc.]
-3. CSS Global: [Reglas sobre el uso de estilos globales vs modulares]
+## Modelo de datos
 
-## Lógica y Convenciones
-1. Estado: [Cómo se maneja la información global de la app]
-2. Servicios: [Cómo y dónde se hacen las llamadas a APIs externas]
-3. [Cualquier otra decisión técnica inamovible]
+### 1. MotivoNoMedicacion
+Relación:
+- ManyToOne con ControlConsultorio
+
+Justificación:
+- selección simple
+
+---
+
+### 2. EventoConsultorio
+Relación:
+- ManyToMany con ControlConsultorio
+
+Justificación:
+- selección múltiple explícita
+
+---
+
+### 3. DerivacionConsultorio
+Relación:
+- ManyToMany con ControlConsultorio
+
+Justificación:
+- selección múltiple explícita
+
+---
+
+## Persistencia dual
+
+El sistema es offline-first:
+
+- SQLite = base operativa local
+- MySQL = base central
+
+Toda tabla nueva debe existir en:
+- backend (JPA)
+- SQLite (db.ts)
+
+---
+
+## Sincronización
+
+Debe actualizarse:
+
+- SyncController (backend)
+- sync.ts (frontend)
+
+Regla:
+NUNCA agregar entidades sin incluirlas en sync
+
+---
+
+## Estrategia de migración
+
+No eliminar inmediatamente:
+
+- eventos (Boolean)
+- derivacion (Boolean)
+
+Se permite coexistencia temporal.
+
+---
+
+## UI
+
+- Motivo → select simple
+- Eventos → multiselect
+- Derivaciones → multiselect
+
+---
+
+## Restricciones técnicas
+
+- NO romper sync existente
+- NO cambiar endpoints actuales sin necesidad
+- NO hardcodear listas en frontend (deben venir del backend o ser consistentes con SQLite)

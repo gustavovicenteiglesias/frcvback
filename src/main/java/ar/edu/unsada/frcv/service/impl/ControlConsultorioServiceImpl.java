@@ -2,6 +2,8 @@
 package ar.edu.unsada.frcv.service.impl;
 
 import ar.edu.unsada.frcv.models.ControlConsultorio;
+import ar.edu.unsada.frcv.models.ControlConsultorioDerivacion;
+import ar.edu.unsada.frcv.models.ControlConsultorioEvento;
 import ar.edu.unsada.frcv.models.Visita;
 import ar.edu.unsada.frcv.repository.ControlConsultorioRepository;
 import ar.edu.unsada.frcv.repository.VisitaRepository;
@@ -10,8 +12,11 @@ import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -44,7 +49,8 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
         c.setVisita(v);
         c.setSqlDeleted(false);
         c.setLastModified(Instant.now().toEpochMilli());
-        if (c.getId() == null || c.getId().isBlank()) c.setId(java.util.UUID.randomUUID().toString());
+        if (c.getId() == null || c.getId().isBlank()) c.setId(UUID.randomUUID().toString());
+        hydrateChildren(c, c.getLastModified());
         return repo.save(c);
     }
 
@@ -82,7 +88,9 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
         db.setConducta(c.getConducta());
         db.setCreatedBy(c.getCreatedBy());
 
-        db.setLastModified(Instant.now().toEpochMilli());
+        long now = Instant.now().toEpochMilli();
+        db.setLastModified(now);
+        syncChildren(db, c, now);
         return repo.save(db);
     }
 
@@ -92,5 +100,55 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
         db.setSqlDeleted(true);
         db.setLastModified(Instant.now().toEpochMilli());
         repo.save(db);
+    }
+
+    private void hydrateChildren(ControlConsultorio c, long timestamp) {
+        if (c.getMotivoNoMedicacion() != null) {
+            if (c.getMotivoNoMedicacion().getId() == null || c.getMotivoNoMedicacion().getId().isBlank()) {
+                c.getMotivoNoMedicacion().setId(UUID.randomUUID().toString());
+            }
+            c.getMotivoNoMedicacion().setLastModified(timestamp);
+            c.getMotivoNoMedicacion().setSqlDeleted(false);
+        }
+
+        if (c.getEventosConsultorio() != null) {
+            c.getEventosConsultorio().forEach(e -> {
+                if (e.getId() == null || e.getId().isBlank()) e.setId(UUID.randomUUID().toString());
+                e.setControlConsultorio(c);
+                e.setLastModified(timestamp);
+                e.setSqlDeleted(false);
+            });
+        }
+
+        if (c.getDerivacionesConsultorio() != null) {
+            c.getDerivacionesConsultorio().forEach(d -> {
+                if (d.getId() == null || d.getId().isBlank()) d.setId(UUID.randomUUID().toString());
+                d.setControlConsultorio(c);
+                d.setLastModified(timestamp);
+                d.setSqlDeleted(false);
+            });
+        }
+    }
+
+    private void syncChildren(ControlConsultorio target, ControlConsultorio incoming, long timestamp) {
+        // Motivo (uno a uno)
+        target.setMotivoNoMedicacion(incoming.getMotivoNoMedicacion());
+        hydrateChildren(target, timestamp);
+
+        // Eventos (reemplazo completo para simplicidad)
+        target.getEventosConsultorio().clear();
+        if (incoming.getEventosConsultorio() != null) {
+            List<ControlConsultorioEvento> events = new ArrayList<>(incoming.getEventosConsultorio());
+            target.getEventosConsultorio().addAll(events);
+        }
+
+        // Derivaciones (reemplazo completo)
+        target.getDerivacionesConsultorio().clear();
+        if (incoming.getDerivacionesConsultorio() != null) {
+            List<ControlConsultorioDerivacion> derivs = new ArrayList<>(incoming.getDerivacionesConsultorio());
+            target.getDerivacionesConsultorio().addAll(derivs);
+        }
+
+        hydrateChildren(target, timestamp);
     }
 }

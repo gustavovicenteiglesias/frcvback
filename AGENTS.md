@@ -1,16 +1,32 @@
-# AGENTS.md - Protocolo de Asistencia de IA
+# AGENTS.md
 
-## Propósito
-Este archivo define las reglas estrictas de inicialización para cualquier agente de IA que intervenga en este repositorio. 
+Antes de realizar cualquier acción, debes leer obligatoriamente:
 
-## 🛑 REGLA CERO: AHORRO DE TOKENS
-Para optimizar el contexto, NUNCA realices un escaneo global del código fuente al iniciar. Toda la información que necesitas para entender el proyecto ya está procesada y resumida en la carpeta `/ai`.
+- ai/context.md
+- ai/decisions.md
+- ai/project-map.md
+- ai/workflow.md
+- ai/tasks/
 
-## Secuencia de Lectura Obligatoria (Boot Sequence)
-Al iniciar una nueva sesión, debes leer silenciosamente estos archivos en el siguiente orden antes de interactuar con el usuario o proponer código:
-1. `ai/workflow.md` (Cómo debes trabajar, interactuar y gestionar tareas)
-2. `ai/context.md` (De qué trata el proyecto y su estado actual)
-3. `ai/decisions.md` (Reglas de arquitectura que no puedes romper)
-4. `ai/project-map.md` (Dónde están las cosas)
+## Regla principal
+NO empieces a codear directamente.
 
-Una vez leídos, ejecuta la primera tarea pendiente según las reglas de `workflow.md`.
+Primero:
+1. Identificar la tarea en /ai/tasks/ con estado TODO
+2. Cambiarla a DOING
+3. Explicar el plan antes de implementar
+
+## Alcance actual
+El foco está en:
+- Extender ControlConsultorio
+- Mantener sincronización MySQL ↔ SQLite
+- No romper la lógica offline-first
+
+## Restricciones críticas
+- NO modificar estructura base del proyecto
+- NO romper sync existente
+- NO inventar endpoints nuevos innecesarios
+- TODO cambio debe reflejarse en:
+  - Backend (Spring)
+  - SQLite (db.ts)
+  - Sync (sync.ts + SyncController)

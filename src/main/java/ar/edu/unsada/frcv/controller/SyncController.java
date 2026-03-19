@@ -31,7 +31,14 @@ public class SyncController {
             "responsables",
             "visitas",
             "control_domicilio",
+            // Catálogos consultorio
+            "motivo_no_medicacion",
+            "evento_catalogo",
+            "derivacion_catalogo",
             "control_consultorio",
+            // Tablas puente consultorio
+            "control_consultorio_evento",
+            "control_consultorio_derivacion",
             "medicacion_hta",                 // catálogo con LM/SD
             "antecedentes",                   // dueño lógico
             "antecedente_has_medicacion_hta", // puente con LM/SD
@@ -64,14 +71,29 @@ public class SyncController {
                 "id","visita_id","created_by_user_id","ta_sistolica","ta_diastolica",
                 "accede_programa","acepta_laboratotio","observaciones","last_modified","sql_deleted"
         ));
+        put("motivo_no_medicacion", List.of(
+                "id","motivo","detalle","last_modified","sql_deleted"
+        ));
+        put("evento_catalogo", List.of(
+                "id","nombre","activo","last_modified","sql_deleted"
+        ));
+        put("derivacion_catalogo", List.of(
+                "id","nombre","activo","last_modified","sql_deleted"
+        ));
         put("control_consultorio", List.of(
-                "id","visita_id","created_by_user_id","fecha","asistencia",
+                "id","visita_id","created_by_user_id","motivo_no_medicacion_id","fecha","asistencia",
                 "ta_sistolica","ta_diastolica",
                 "peso","talla","imc",
                 "circ_cintura","fumador",
                 "confirm_hta","control_medicacion","derivacion","entrega_medicacion","eventos","conducta",
                 "medicacion","observaciones","observaciones_derivacion","observaciones_eventos",
                 "last_modified","sql_deleted"
+        ));
+        put("control_consultorio_evento", List.of(
+                "id","control_consultorio_id","evento_id","detalle","last_modified","sql_deleted"
+        ));
+        put("control_consultorio_derivacion", List.of(
+                "id","control_consultorio_id","derivacion_id","detalle","last_modified","sql_deleted"
         ));
         put("antecedentes", List.of(
                 "id","persona_id","visita_id","created_by_user_id",
@@ -102,6 +124,8 @@ public class SyncController {
     /** PK compuesta por tabla (si no está, se toma la primera columna como PK simple) */
     private static final Map<String, List<String>> COMPOSITE_PKS = new HashMap<>() {{
         put("antecedente_has_medicacion_hta", List.of("antecedente_id","medicacion_id"));
+        put("control_consultorio_evento", List.of("control_consultorio_id","evento_id"));
+        put("control_consultorio_derivacion", List.of("control_consultorio_id","derivacion_id"));
     }};
 
     private List<String> pkFor(String table) {
@@ -260,6 +284,7 @@ public class SyncController {
         // Cascada de baja lógica SOLO para las personas marcadas en este push
         Map<String, Integer> cascaded = personasMarcadasBaja.isEmpty()
                 ? Map.of("visitas", 0, "control_domicilio", 0, "control_consultorio", 0,
+                "control_consultorio_evento", 0, "control_consultorio_derivacion", 0,
                 "antecedentes", 0, "antecedente_has_medicacion_hta", 0, "lab_resultados", 0)
                 : cascadeSoftDeleteForPersonas(personasMarcadasBaja);
 
@@ -308,6 +333,20 @@ public class SyncController {
                 "UPDATE control_consultorio SET sql_deleted = 1, last_modified = ? " +
                         "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE sql_deleted = 1)", now);
         out.put("control_consultorio", cc);
+
+        // 3b) control_consultorio_evento
+        int cce = jdbc.update(
+                "UPDATE control_consultorio_evento SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (SELECT id FROM control_consultorio WHERE sql_deleted = 1)",
+                now);
+        out.put("control_consultorio_evento", cce);
+
+        // 3c) control_consultorio_derivacion
+        int ccd = jdbc.update(
+                "UPDATE control_consultorio_derivacion SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (SELECT id FROM control_consultorio WHERE sql_deleted = 1)",
+                now);
+        out.put("control_consultorio_derivacion", ccd);
 
         // 4) antecedentes
         List<Object> argsA = new ArrayList<>();
@@ -532,6 +571,7 @@ public class SyncController {
                         col("id","TEXT PRIMARY KEY NOT NULL"),
                         col("visita_id","TEXT NOT NULL"),
                         col("created_by_user_id","TEXT"),
+                        col("motivo_no_medicacion_id","TEXT"),
                         col("fecha","TEXT"),
                         col("asistencia", bool("asistencia")),
                         col("ta_sistolica","INTEGER"),
@@ -554,6 +594,8 @@ public class SyncController {
                         col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted", bool0("sql_deleted")),
                         fk("visita_id","REFERENCES visitas(id) ON DELETE CASCADE")
+                        ,
+                        fk("motivo_no_medicacion_id","REFERENCES motivo_no_medicacion(id) ON DELETE SET NULL")
                 ),
                 List.of(
                         idx("idx_cc_lm","last_modified"),
@@ -563,6 +605,7 @@ public class SyncController {
                 null,
                 selectValuesSecSql("""
       SELECT cc.id, cc.visita_id, cc.created_by_user_id, cc.fecha, cc.asistencia,
+             cc.motivo_no_medicacion_id,
              cc.ta_sistolica, cc.ta_diastolica, cc.peso, cc.talla, cc.imc,
              cc.circ_cintura, cc.fumador, cc.confirm_hta, cc.control_medicacion,
              cc.derivacion, cc.entrega_medicacion, cc.eventos, cc.conducta,
@@ -573,11 +616,145 @@ public class SyncController {
       JOIN personas p  ON p.id = v.persona_id    AND p.sql_deleted = 0
       WHERE cc.sql_deleted IN (0,1)
     """, List.of(
-                        "id","visita_id","created_by_user_id","fecha","asistencia",
+                        "id","visita_id","created_by_user_id","motivo_no_medicacion_id","fecha","asistencia",
                         "ta_sistolica","ta_diastolica","peso","talla","imc",
                         "circ_cintura","fumador","confirm_hta","control_medicacion","derivacion",
                         "entrega_medicacion","eventos","conducta",
                         "medicacion","observaciones","observaciones_derivacion","observaciones_eventos",
+                        "last_modified","sql_deleted"
+                ))
+        ));
+
+        // ---------- motivo_no_medicacion ----------
+        tables.add(tableWithSchemaIdxValues(
+                "motivo_no_medicacion",
+                List.of(
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("motivo","TEXT NOT NULL"),
+                        col("detalle","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted"))
+                ),
+                List.of(
+                        idx("idx_mnm_lm","last_modified"),
+                        idx("idx_mnm_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSec("motivo_no_medicacion", List.of(
+                        "id","motivo","detalle","last_modified","sql_deleted"
+                ))
+        ));
+
+        // ---------- evento_catalogo ----------
+        tables.add(tableWithSchemaIdxValues(
+                "evento_catalogo",
+                List.of(
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("nombre","TEXT NOT NULL"),
+                        col("activo", bool1("activo")),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted"))
+                ),
+                List.of(
+                        idxUnique("uk_evento_nombre","nombre"),
+                        idx("idx_evento_lm","last_modified"),
+                        idx("idx_evento_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSec("evento_catalogo", List.of(
+                        "id","nombre","activo","last_modified","sql_deleted"
+                ))
+        ));
+
+        // ---------- derivacion_catalogo ----------
+        tables.add(tableWithSchemaIdxValues(
+                "derivacion_catalogo",
+                List.of(
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("nombre","TEXT NOT NULL"),
+                        col("activo", bool1("activo")),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted"))
+                ),
+                List.of(
+                        idxUnique("uk_derivacion_nombre","nombre"),
+                        idx("idx_derivacion_lm","last_modified"),
+                        idx("idx_derivacion_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSec("derivacion_catalogo", List.of(
+                        "id","nombre","activo","last_modified","sql_deleted"
+                ))
+        ));
+
+        // ---------- control_consultorio_evento ----------
+        tables.add(tableWithSchemaIdxValues(
+                "control_consultorio_evento",
+                List.of(
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("control_consultorio_id","TEXT NOT NULL"),
+                        col("evento_id","TEXT NOT NULL"),
+                        col("detalle","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted")),
+                        fk("control_consultorio_id","REFERENCES control_consultorio(id) ON DELETE CASCADE"),
+                        fk("evento_id","REFERENCES evento_catalogo(id) ON DELETE RESTRICT")
+                ),
+                List.of(
+                        idxUnique("uk_cce_cc_evento","control_consultorio_id,evento_id"),
+                        idx("idx_cce_cc","control_consultorio_id"),
+                        idx("idx_cce_evento","evento_id"),
+                        idx("idx_cce_lm","last_modified"),
+                        idx("idx_cce_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSecSql("""
+      SELECT cce.id, cce.control_consultorio_id, cce.evento_id, cce.detalle,
+             cce.last_modified, cce.sql_deleted
+      FROM control_consultorio_evento cce
+      JOIN control_consultorio cc ON cc.id = cce.control_consultorio_id AND cc.sql_deleted IN (0,1)
+      JOIN visitas v ON v.id = cc.visita_id AND v.sql_deleted IN (0,1)
+      JOIN personas p ON p.id = v.persona_id AND p.sql_deleted = 0
+      JOIN evento_catalogo ev ON ev.id = cce.evento_id AND ev.sql_deleted IN (0,1)
+      WHERE cce.sql_deleted IN (0,1)
+    """, List.of(
+                        "id","control_consultorio_id","evento_id","detalle",
+                        "last_modified","sql_deleted"
+                ))
+        ));
+
+        // ---------- control_consultorio_derivacion ----------
+        tables.add(tableWithSchemaIdxValues(
+                "control_consultorio_derivacion",
+                List.of(
+                        col("id","TEXT PRIMARY KEY NOT NULL"),
+                        col("control_consultorio_id","TEXT NOT NULL"),
+                        col("derivacion_id","TEXT NOT NULL"),
+                        col("detalle","TEXT"),
+                        col("last_modified","INTEGER NOT NULL"),
+                        col("sql_deleted", bool0("sql_deleted")),
+                        fk("control_consultorio_id","REFERENCES control_consultorio(id) ON DELETE CASCADE"),
+                        fk("derivacion_id","REFERENCES derivacion_catalogo(id) ON DELETE RESTRICT")
+                ),
+                List.of(
+                        idxUnique("uk_ccd_cc_deriv","control_consultorio_id,derivacion_id"),
+                        idx("idx_ccd_cc","control_consultorio_id"),
+                        idx("idx_ccd_deriv","derivacion_id"),
+                        idx("idx_ccd_lm","last_modified"),
+                        idx("idx_ccd_sd","sql_deleted")
+                ),
+                null,
+                selectValuesSecSql("""
+      SELECT ccd.id, ccd.control_consultorio_id, ccd.derivacion_id, ccd.detalle,
+             ccd.last_modified, ccd.sql_deleted
+      FROM control_consultorio_derivacion ccd
+      JOIN control_consultorio cc ON cc.id = ccd.control_consultorio_id AND cc.sql_deleted IN (0,1)
+      JOIN visitas v ON v.id = cc.visita_id AND v.sql_deleted IN (0,1)
+      JOIN personas p ON p.id = v.persona_id AND p.sql_deleted = 0
+      JOIN derivacion_catalogo dc ON dc.id = ccd.derivacion_id AND dc.sql_deleted IN (0,1)
+      WHERE ccd.sql_deleted IN (0,1)
+    """, List.of(
+                        "id","control_consultorio_id","derivacion_id","detalle",
                         "last_modified","sql_deleted"
                 ))
         ));
@@ -893,6 +1070,7 @@ public class SyncController {
                 s.equals("asistencia") ||
                 s.equals("accede_programa") ||
                 s.equals("acepta_laboratotio") ||
+                s.equals("activo") ||
                 s.equals("fumador") ||
                 s.equals("confirm_hta") ||
                 s.equals("control_medicacion") ||
