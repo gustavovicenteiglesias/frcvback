@@ -21,4 +21,12 @@ Crear README.md y carpeta docs/ en la raiz del backend con documentacion complet
 
 ## Estado
 
-DOING
+DONE
+
+## Verificacion
+
+- README.md creado en la raiz del backend.
+- Carpeta docs/ creada con 9 documentos.
+- Se incluyeron diagramas Mermaid y documentacion en espanol.
+
+
