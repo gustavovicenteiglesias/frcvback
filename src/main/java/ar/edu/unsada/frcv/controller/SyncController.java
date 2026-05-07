@@ -220,8 +220,10 @@ public class SyncController {
 
         int applied = 0, skipped = 0;
 
-        // Para cascada targeteada: personas que quedaron con sql_deleted=1 tras este push
+        // Para cascada targeteada: viviendas/personas que quedaron con sql_deleted=1 tras este push
+        final Set<String> viviendasMarcadasBaja = new HashSet<>();
         final Set<String> personasMarcadasBaja = new HashSet<>();
+        final Set<String> controlesConsultorioMarcadosBaja = new HashSet<>();
 
         for (String table : TABLE_ORDER) {
             if (!incoming.containsKey(table) || !tableExists(table)) continue;
@@ -270,7 +272,15 @@ public class SyncController {
                     }
                 }
 
-                // Si estamos procesando PERSONAS, registrar las que quedan en baja lógica (=1)
+                // Si estamos procesando VIVIENDAS o PERSONAS, registrar las que quedan en baja lógica (=1)
+                if ("viviendas".equals(table)) {
+                    Object id = row.getOrDefault("id", null);
+                    Object sd = row.getOrDefault("sql_deleted", 0);
+                    if (id != null && Objects.equals(boolAsInt(sd), 1)) {
+                        viviendasMarcadasBaja.add(String.valueOf(id));
+                    }
+                }
+
                 if ("personas".equals(table)) {
                     Object id = row.getOrDefault("id", null);
                     Object sd = row.getOrDefault("sql_deleted", 0);
@@ -278,21 +288,40 @@ public class SyncController {
                         personasMarcadasBaja.add(String.valueOf(id));
                     }
                 }
+
+                if ("control_consultorio".equals(table)) {
+                    Object id = row.getOrDefault("id", null);
+                    Object sd = row.getOrDefault("sql_deleted", 0);
+                    if (id != null && Objects.equals(boolAsInt(sd), 1)) {
+                        controlesConsultorioMarcadosBaja.add(String.valueOf(id));
+                    }
+                }
             }
         }
 
+        if (!viviendasMarcadasBaja.isEmpty()) {
+            personasMarcadasBaja.addAll(findPersonaIdsByViviendas(viviendasMarcadasBaja));
+        }
+
         // Cascada de baja lógica SOLO para las personas marcadas en este push
-        Map<String, Integer> cascaded = personasMarcadasBaja.isEmpty()
-                ? Map.of("visitas", 0, "control_domicilio", 0, "control_consultorio", 0,
+        Map<String, Integer> cascaded = new LinkedHashMap<>(personasMarcadasBaja.isEmpty()
+                ? Map.of("viviendas", 0, "personas", 0, "visitas", 0, "control_domicilio", 0, "control_consultorio", 0,
                 "control_consultorio_evento", 0, "control_consultorio_derivacion", 0,
                 "antecedentes", 0, "antecedente_has_medicacion_hta", 0, "lab_resultados", 0)
-                : cascadeSoftDeleteForPersonas(personasMarcadasBaja);
+                : cascadeSoftDeleteForPersonas(personasMarcadasBaja, viviendasMarcadasBaja));
+
+        if (!controlesConsultorioMarcadosBaja.isEmpty()) {
+            Map<String, Integer> ccCascade = cascadeSoftDeleteForControlConsultorio(controlesConsultorioMarcadosBaja);
+            ccCascade.forEach((k, v) -> cascaded.merge(k, v, Integer::sum));
+        }
 
         return ResponseEntity.ok(Map.of(
                 "applied", applied,
                 "skipped", skipped,
                 "cascade_soft_deleted", cascaded,
-                "personas_borradas", personasMarcadasBaja.size()
+                "personas_borradas", personasMarcadasBaja.size(),
+                "viviendas_borradas", viviendasMarcadasBaja.size(),
+                "controles_consultorio_borrados", controlesConsultorioMarcadosBaja.size()
         ));
     }
 
@@ -304,7 +333,20 @@ public class SyncController {
      * Propaga sql_deleted = 1 desde PERSONAS a TODAS las tablas hijas/nietas,
      * limitando la cascada al conjunto recibido. Idempotente.
      */
-    private Map<String, Integer> cascadeSoftDeleteForPersonas(Set<String> personaIds) {
+    private Set<String> findPersonaIdsByViviendas(Set<String> viviendaIds) {
+        if (viviendaIds == null || viviendaIds.isEmpty()) return Set.of();
+        String placeholders = viviendaIds.stream().map(x -> "?").collect(Collectors.joining(","));
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT id FROM personas WHERE viviendas_id IN (" + placeholders + ")",
+                viviendaIds.toArray()
+        );
+        return rows.stream()
+                .map(r -> Objects.toString(r.get("id"), ""))
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toSet());
+    }
+
+    private Map<String, Integer> cascadeSoftDeleteForPersonas(Set<String> personaIds, Set<String> viviendaIds) {
         long now = nowSec();
         Map<String, Integer> out = new LinkedHashMap<>();
         if (personaIds == null || personaIds.isEmpty()) return out;
@@ -312,6 +354,29 @@ public class SyncController {
         // Helpers para IN (?, ?, ?)
         String placeholders = personaIds.stream().map(x -> "?").collect(Collectors.joining(","));
         List<Object> args = new ArrayList<>(personaIds);
+
+        if (viviendaIds != null && !viviendaIds.isEmpty()) {
+            String viviendaPlaceholders = viviendaIds.stream().map(x -> "?").collect(Collectors.joining(","));
+            List<Object> argsViv = new ArrayList<>();
+            argsViv.add(now);
+            argsViv.addAll(viviendaIds);
+            int viv = jdbc.update(
+                    "UPDATE viviendas SET sql_deleted = 1, last_modified = ? " +
+                            "WHERE sql_deleted = 0 AND id IN (" + viviendaPlaceholders + ")",
+                    argsViv.toArray()
+            );
+            out.put("viviendas", viv);
+        } else {
+            out.put("viviendas", 0);
+        }
+
+        List<Object> argsP = new ArrayList<>();
+        argsP.add(now);
+        argsP.addAll(args);
+        int p = jdbc.update(
+                "UPDATE personas SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND id IN (" + placeholders + ")", argsP.toArray());
+        out.put("personas", p);
 
         // 1) visitas de personas borradas
         List<Object> argsV = new ArrayList<>();
@@ -325,27 +390,33 @@ public class SyncController {
         // 2) control_domicilio
         int cd = jdbc.update(
                 "UPDATE control_domicilio SET sql_deleted = 1, last_modified = ? " +
-                        "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE sql_deleted = 1)", now);
+                        "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE persona_id IN (" + placeholders + "))",
+                argsV.toArray());
         out.put("control_domicilio", cd);
 
         // 3) control_consultorio
         int cc = jdbc.update(
                 "UPDATE control_consultorio SET sql_deleted = 1, last_modified = ? " +
-                        "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE sql_deleted = 1)", now);
+                        "WHERE sql_deleted = 0 AND visita_id IN (SELECT id FROM visitas WHERE persona_id IN (" + placeholders + "))",
+                argsV.toArray());
         out.put("control_consultorio", cc);
 
         // 3b) control_consultorio_evento
         int cce = jdbc.update(
                 "UPDATE control_consultorio_evento SET sql_deleted = 1, last_modified = ? " +
-                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (SELECT id FROM control_consultorio WHERE sql_deleted = 1)",
-                now);
+                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (" +
+                        "SELECT cc.id FROM control_consultorio cc JOIN visitas v ON v.id = cc.visita_id " +
+                        "WHERE v.persona_id IN (" + placeholders + "))",
+                argsV.toArray());
         out.put("control_consultorio_evento", cce);
 
         // 3c) control_consultorio_derivacion
         int ccd = jdbc.update(
                 "UPDATE control_consultorio_derivacion SET sql_deleted = 1, last_modified = ? " +
-                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (SELECT id FROM control_consultorio WHERE sql_deleted = 1)",
-                now);
+                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (" +
+                        "SELECT cc.id FROM control_consultorio cc JOIN visitas v ON v.id = cc.visita_id " +
+                        "WHERE v.persona_id IN (" + placeholders + "))",
+                argsV.toArray());
         out.put("control_consultorio_derivacion", ccd);
 
         // 4) antecedentes
@@ -360,7 +431,8 @@ public class SyncController {
         // 5) puente antecedente_has_medicacion_hta
         int am = jdbc.update(
                 "UPDATE antecedente_has_medicacion_hta SET sql_deleted = 1, last_modified = ? " +
-                        "WHERE sql_deleted = 0 AND antecedente_id IN (SELECT id FROM antecedentes WHERE sql_deleted = 1)", now);
+                        "WHERE sql_deleted = 0 AND antecedente_id IN (SELECT id FROM antecedentes WHERE persona_id IN (" + placeholders + "))",
+                argsV.toArray());
         out.put("antecedente_has_medicacion_hta", am);
 
         // 6) lab_resultados
@@ -371,6 +443,39 @@ public class SyncController {
                 "UPDATE lab_resultados SET sql_deleted = 1, last_modified = ? " +
                         "WHERE sql_deleted = 0 AND persona_id IN (" + placeholders + ")", argsL.toArray());
         out.put("lab_resultados", lr);
+
+        return out;
+    }
+
+    private Map<String, Integer> cascadeSoftDeleteForControlConsultorio(Set<String> controlIds) {
+        long now = nowSec();
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (controlIds == null || controlIds.isEmpty()) return out;
+
+        String placeholders = controlIds.stream().map(x -> "?").collect(Collectors.joining(","));
+        List<Object> args = new ArrayList<>();
+        args.add(now);
+        args.addAll(controlIds);
+
+        int motivo = jdbc.update(
+                "UPDATE motivo_no_medicacion SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND id IN (" +
+                        "SELECT motivo_no_medicacion_id FROM control_consultorio " +
+                        "WHERE id IN (" + placeholders + ") AND motivo_no_medicacion_id IS NOT NULL)",
+                args.toArray());
+        out.put("motivo_no_medicacion", motivo);
+
+        int eventos = jdbc.update(
+                "UPDATE control_consultorio_evento SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (" + placeholders + ")",
+                args.toArray());
+        out.put("control_consultorio_evento", eventos);
+
+        int derivaciones = jdbc.update(
+                "UPDATE control_consultorio_derivacion SET sql_deleted = 1, last_modified = ? " +
+                        "WHERE sql_deleted = 0 AND control_consultorio_id IN (" + placeholders + ")",
+                args.toArray());
+        out.put("control_consultorio_derivacion", derivaciones);
 
         return out;
     }

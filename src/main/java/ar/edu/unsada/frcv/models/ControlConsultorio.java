@@ -63,17 +63,17 @@ public class ControlConsultorio extends BaseEntity {
 
     @Column(name="eventos",columnDefinition = "TINYINT(1)")
     private Boolean eventos;
-    @Column(name = "observaciones_eventos")
+    @Column(name = "observaciones_eventos", columnDefinition = "TEXT")
     private String observaciones_eventos;
 
     @Column(name = "derivacion",columnDefinition = "TINYINT(1)")
     private Boolean derivacion;
-    @Column(name = "observaciones_derivacion")
+    @Column(name = "observaciones_derivacion", columnDefinition = "TEXT")
     private String observaciones_derivacion;
 
     @Column(name="fumador")
     private Boolean fumador;
-    @Column(name = "Observaciones")
+    @Column(name = "Observaciones", columnDefinition = "TEXT")
     private String observaciones;
 
     @Column(name = "medicacion", columnDefinition = "text")

@@ -97,8 +97,25 @@ public class ControlConsultorioServiceImpl implements ControlConsultorioService 
     @Override
     public void delete(String id) {
         ControlConsultorio db = get(id).orElseThrow(() -> new NoSuchElementException("Control de consultorio no encontrado"));
+        long now = Instant.now().toEpochMilli();
+        if (db.getMotivoNoMedicacion() != null) {
+            db.getMotivoNoMedicacion().setSqlDeleted(true);
+            db.getMotivoNoMedicacion().setLastModified(now);
+        }
+        if (db.getEventosConsultorio() != null) {
+            db.getEventosConsultorio().forEach(e -> {
+                e.setSqlDeleted(true);
+                e.setLastModified(now);
+            });
+        }
+        if (db.getDerivacionesConsultorio() != null) {
+            db.getDerivacionesConsultorio().forEach(d -> {
+                d.setSqlDeleted(true);
+                d.setLastModified(now);
+            });
+        }
         db.setSqlDeleted(true);
-        db.setLastModified(Instant.now().toEpochMilli());
+        db.setLastModified(now);
         repo.save(db);
     }
 
