@@ -59,6 +59,9 @@ La documentación completa está en la carpeta [`docs/`](docs/):
 - [Modelo de datos principal](docs/07-modelo-datos-principal.md)
 - [Roles y permisos](docs/08-roles-y-permisos.md)
 - [Cambios recientes](docs/09-cambios-recientes.md)
+- [Mapa territorial y calidad geográfica](docs/10-mapa-territorial-y-calidad-geografica.md)
+- [Línea de calidad del dato](docs/11-linea-calidad-del-dato.md)
+- [Tablero de administración online](docs/12-tablero-administracion-online.md)
 
 ## Principios de diseño
 

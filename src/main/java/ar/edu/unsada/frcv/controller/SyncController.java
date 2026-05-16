@@ -1,8 +1,10 @@
 package ar.edu.unsada.frcv.controller;
 
 import jakarta.transaction.Transactional;
+import ar.edu.unsada.frcv.security.JwtUser;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.sql.*;
@@ -18,6 +20,36 @@ public class SyncController {
 
     public SyncController(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    @PostMapping("/event")
+    public ResponseEntity<Map<String, Object>> syncEvent(
+            @RequestBody Map<String, Object> body,
+            Authentication authentication
+    ) {
+        try {
+            ensureSyncEventsTable();
+            JwtUser jwtUser = jwtUser(authentication);
+            jdbc.update("""
+                    INSERT INTO sync_events
+                    (id, user_id, email, device_id, platform, operation, result, message, app_version, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    UUID.randomUUID().toString(),
+                    jwtUser == null ? null : jwtUser.getUserId(),
+                    jwtUser == null ? null : jwtUser.getEmail(),
+                    shortText(body.get("deviceId"), 120),
+                    shortText(body.get("platform"), 40),
+                    shortText(body.get("operation"), 40),
+                    shortText(body.get("result"), 20),
+                    shortText(body.get("message"), 240),
+                    shortText(body.get("appVersion"), 40),
+                    Instant.now().getEpochSecond()
+            );
+            return ResponseEntity.ok(Map.of("logged", true));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("logged", false));
+        }
     }
 
     /* =========================================================
@@ -139,6 +171,39 @@ public class SyncController {
     }
 
     private static final String LM = "last_modified";
+
+    private void ensureSyncEventsTable() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS sync_events (
+                  id VARCHAR(36) PRIMARY KEY,
+                  user_id VARCHAR(36) NULL,
+                  email VARCHAR(190) NULL,
+                  device_id VARCHAR(120) NULL,
+                  platform VARCHAR(40) NULL,
+                  operation VARCHAR(40) NOT NULL,
+                  result VARCHAR(20) NOT NULL,
+                  message VARCHAR(240) NULL,
+                  app_version VARCHAR(40) NULL,
+                  created_at BIGINT NOT NULL,
+                  INDEX idx_sync_events_created_at (created_at),
+                  INDEX idx_sync_events_user_id (user_id),
+                  INDEX idx_sync_events_result (result)
+                )
+                """);
+    }
+
+    private JwtUser jwtUser(Authentication authentication) {
+        if (authentication == null || authentication.getPrincipal() == null) return null;
+        Object principal = authentication.getPrincipal();
+        return principal instanceof JwtUser jwtUser ? jwtUser : null;
+    }
+
+    private String shortText(Object value, int max) {
+        if (value == null) return null;
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) return null;
+        return text.length() <= max ? text : text.substring(0, max);
+    }
 
     /* ===========================
        PULL (parcial, por last_modified)
