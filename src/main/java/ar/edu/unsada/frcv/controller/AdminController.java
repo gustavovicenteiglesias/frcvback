@@ -132,6 +132,49 @@ public class AdminController {
                           AND (latitud IS NULL OR TRIM(latitud) = ''
                            OR longitud IS NULL OR TRIM(longitud) = '')
                         """)),
+                Map.entry("viviendasBajaConfianza", count("""
+                        SELECT COUNT(*)
+                        FROM viviendas
+                        WHERE COALESCE(sql_deleted, 0) = 0
+                          AND confianza_dato = 'baja'
+                        """)),
+                Map.entry("viviendasNoUsables", count("""
+                        SELECT COUNT(*)
+                        FROM viviendas
+                        WHERE COALESCE(sql_deleted, 0) = 0
+                          AND confianza_dato = 'no_usable'
+                        """)),
+                Map.entry("viviendasCoordenadasRepetidas", count("""
+                        SELECT COUNT(*)
+                        FROM (
+                            SELECT TRIM(latitud), TRIM(longitud)
+                            FROM viviendas
+                            WHERE COALESCE(sql_deleted, 0) = 0
+                              AND latitud IS NOT NULL AND TRIM(latitud) <> ''
+                              AND longitud IS NOT NULL AND TRIM(longitud) <> ''
+                            GROUP BY TRIM(latitud), TRIM(longitud)
+                            HAVING COUNT(*) > 1
+                        ) repetidas
+                        """)),
+                Map.entry("viviendasDireccionSn", count("""
+                        SELECT COUNT(*)
+                        FROM viviendas
+                        WHERE COALESCE(sql_deleted, 0) = 0
+                          AND UPPER(TRIM(COALESCE(direccion, ''))) LIKE '%S/N'
+                        """)),
+                Map.entry("viviendasGpsPrecisionBaja", count("""
+                        SELECT COUNT(*)
+                        FROM viviendas
+                        WHERE COALESCE(sql_deleted, 0) = 0
+                          AND gps_accuracy IS NOT NULL
+                          AND gps_accuracy > 100
+                        """)),
+                Map.entry("viviendasFuenteDudosa", count("""
+                        SELECT COUNT(*)
+                        FROM viviendas
+                        WHERE COALESCE(sql_deleted, 0) = 0
+                          AND COALESCE(ubicacion_fuente, 'sin_dato') IN ('sin_dato', 'estimada')
+                        """)),
                 Map.entry("controlesDomicilioSinTa", count("""
                         SELECT COUNT(*)
                         FROM control_domicilio
@@ -753,6 +796,136 @@ public class AdminController {
                     WHERE COALESCE(viv.sql_deleted, 0) = 0
                       AND (viv.latitud IS NULL OR TRIM(viv.latitud) = ''
                        OR viv.longitud IS NULL OR TRIM(viv.longitud) = '')
+                    ORDER BY viv.fecha DESC, viv.direccion
+                    LIMIT 500
+                    """));
+            case "viviendas-baja-confianza" -> ResponseEntity.ok(queryList("""
+                    SELECT
+                      viv.id AS vivienda_id,
+                      viv.fecha,
+                      viv.direccion,
+                      viv.casa,
+                      viv.manzana,
+                      b.nombre AS barrio,
+                      c.nombre AS caps,
+                      viv.latitud,
+                      viv.longitud,
+                      viv.gps_accuracy,
+                      viv.ubicacion_fuente,
+                      viv.confianza_dato,
+                      'Vivienda con baja confianza territorial' AS problema
+                    FROM viviendas viv
+                    LEFT JOIN barrios b ON b.id = viv.barrios_id
+                    LEFT JOIN caps c ON c.id = viv.caps_id
+                    WHERE COALESCE(viv.sql_deleted, 0) = 0
+                      AND viv.confianza_dato = 'baja'
+                    ORDER BY viv.fecha DESC, viv.direccion
+                    LIMIT 500
+                    """));
+            case "viviendas-no-usables" -> ResponseEntity.ok(queryList("""
+                    SELECT
+                      viv.id AS vivienda_id,
+                      viv.fecha,
+                      viv.direccion,
+                      viv.casa,
+                      viv.manzana,
+                      b.nombre AS barrio,
+                      c.nombre AS caps,
+                      viv.latitud,
+                      viv.longitud,
+                      viv.gps_accuracy,
+                      viv.ubicacion_fuente,
+                      viv.confianza_dato,
+                      'Vivienda no usable para analisis territorial' AS problema
+                    FROM viviendas viv
+                    LEFT JOIN barrios b ON b.id = viv.barrios_id
+                    LEFT JOIN caps c ON c.id = viv.caps_id
+                    WHERE COALESCE(viv.sql_deleted, 0) = 0
+                      AND viv.confianza_dato = 'no_usable'
+                    ORDER BY viv.fecha DESC, viv.direccion
+                    LIMIT 500
+                    """));
+            case "viviendas-coordenadas-repetidas" -> ResponseEntity.ok(queryList("""
+                    SELECT
+                      TRIM(viv.latitud) AS latitud,
+                      TRIM(viv.longitud) AS longitud,
+                      COUNT(*) AS cantidad_viviendas,
+                      GROUP_CONCAT(DISTINCT viv.id SEPARATOR ' | ') AS viviendas_id,
+                      GROUP_CONCAT(DISTINCT COALESCE(b.nombre, 'Sin barrio') SEPARATOR ' | ') AS barrios,
+                      GROUP_CONCAT(DISTINCT COALESCE(viv.direccion, 'Sin direccion') SEPARATOR ' | ') AS direcciones,
+                      'Coordenada repetida en varias viviendas' AS problema
+                    FROM viviendas viv
+                    LEFT JOIN barrios b ON b.id = viv.barrios_id
+                    WHERE COALESCE(viv.sql_deleted, 0) = 0
+                      AND viv.latitud IS NOT NULL AND TRIM(viv.latitud) <> ''
+                      AND viv.longitud IS NOT NULL AND TRIM(viv.longitud) <> ''
+                    GROUP BY TRIM(viv.latitud), TRIM(viv.longitud)
+                    HAVING COUNT(*) > 1
+                    ORDER BY cantidad_viviendas DESC
+                    LIMIT 500
+                    """));
+            case "viviendas-direccion-sn" -> ResponseEntity.ok(queryList("""
+                    SELECT
+                      viv.id AS vivienda_id,
+                      viv.fecha,
+                      viv.direccion,
+                      viv.casa,
+                      viv.manzana,
+                      b.nombre AS barrio,
+                      c.nombre AS caps,
+                      viv.latitud,
+                      viv.longitud,
+                      viv.confianza_dato,
+                      'Direccion declarada sin numero: revisar origen' AS problema
+                    FROM viviendas viv
+                    LEFT JOIN barrios b ON b.id = viv.barrios_id
+                    LEFT JOIN caps c ON c.id = viv.caps_id
+                    WHERE COALESCE(viv.sql_deleted, 0) = 0
+                      AND UPPER(TRIM(COALESCE(viv.direccion, ''))) LIKE '%S/N'
+                    ORDER BY viv.fecha DESC, viv.direccion
+                    LIMIT 500
+                    """));
+            case "viviendas-gps-precision-baja" -> ResponseEntity.ok(queryList("""
+                    SELECT
+                      viv.id AS vivienda_id,
+                      viv.fecha,
+                      viv.direccion,
+                      b.nombre AS barrio,
+                      c.nombre AS caps,
+                      viv.latitud,
+                      viv.longitud,
+                      viv.gps_accuracy,
+                      viv.gps_captured_at,
+                      viv.ubicacion_fuente,
+                      viv.confianza_dato,
+                      'GPS con precision mayor a 100 metros' AS problema
+                    FROM viviendas viv
+                    LEFT JOIN barrios b ON b.id = viv.barrios_id
+                    LEFT JOIN caps c ON c.id = viv.caps_id
+                    WHERE COALESCE(viv.sql_deleted, 0) = 0
+                      AND viv.gps_accuracy IS NOT NULL
+                      AND viv.gps_accuracy > 100
+                    ORDER BY viv.gps_accuracy DESC, viv.fecha DESC
+                    LIMIT 500
+                    """));
+            case "viviendas-fuente-dudosa" -> ResponseEntity.ok(queryList("""
+                    SELECT
+                      viv.id AS vivienda_id,
+                      viv.fecha,
+                      viv.direccion,
+                      b.nombre AS barrio,
+                      c.nombre AS caps,
+                      viv.latitud,
+                      viv.longitud,
+                      viv.gps_accuracy,
+                      viv.ubicacion_fuente,
+                      viv.confianza_dato,
+                      'Fuente de ubicacion sin dato o estimada' AS problema
+                    FROM viviendas viv
+                    LEFT JOIN barrios b ON b.id = viv.barrios_id
+                    LEFT JOIN caps c ON c.id = viv.caps_id
+                    WHERE COALESCE(viv.sql_deleted, 0) = 0
+                      AND COALESCE(viv.ubicacion_fuente, 'sin_dato') IN ('sin_dato', 'estimada')
                     ORDER BY viv.fecha DESC, viv.direccion
                     LIMIT 500
                     """));

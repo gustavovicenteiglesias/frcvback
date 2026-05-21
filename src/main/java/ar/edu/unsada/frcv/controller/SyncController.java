@@ -1,7 +1,10 @@
 package ar.edu.unsada.frcv.controller;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import ar.edu.unsada.frcv.security.JwtUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
@@ -16,10 +19,32 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/sync")
 public class SyncController {
 
+    private static final Logger log = LoggerFactory.getLogger(SyncController.class);
+
     private final JdbcTemplate jdbc;
+
+    private static final List<String> VIVIENDAS_LEGACY_COLS = List.of(
+            "id","barrios_id","caps_id","fecha","accedio","motivo","casa","manzana",
+            "latitud","longitud","direccion","last_modified","sql_deleted"
+    );
+
+    private static final List<String> VIVIENDAS_COLS = List.of(
+            "id","barrios_id","caps_id","fecha","accedio","motivo","casa","manzana",
+            "latitud","longitud","direccion","last_modified","sql_deleted",
+            "gps_accuracy","gps_captured_at","ubicacion_fuente","confianza_dato"
+    );
 
     public SyncController(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    @PostConstruct
+    public void ensureQualityColumnsOnStartup() {
+        try {
+            ensureViviendasQualityColumns();
+        } catch (Exception e) {
+            log.warn("No se pudieron asegurar las columnas de calidad de viviendas. Revisar migracion manual.", e);
+        }
     }
 
     @PostMapping("/event")
@@ -84,10 +109,7 @@ public class SyncController {
     private static final Map<String, List<String>> MOBILE_COLS = new LinkedHashMap<>() {{
         put("barrios", List.of("id","nombre","last_modified","sql_deleted"));
         put("caps", List.of("id","nombre","last_modified","sql_deleted"));
-        put("viviendas", List.of(
-                "id","barrios_id","caps_id","fecha","accedio","motivo","casa","manzana",
-                "latitud","longitud","direccion","last_modified","sql_deleted"
-        ));
+        put("viviendas", VIVIENDAS_COLS);
         put("personas", List.of(
                 "id","dni","apellido","nombre","sexo","fecha_nac","telefono","cobertura_salud",
                 "viviendas_id","last_modified","sql_deleted"
@@ -132,8 +154,8 @@ public class SyncController {
                 "diabetes","dislipemia","enf_cardiovascular","enf_renal_cronica","hta_previa","tabaquismo",
                 "tratamiento_enf_cardiovascular","tratamiento_enf_diabetes","tratamiento_enf_dislipemia",
                 "tratamiento_enf_renal","tratamiento_hta_previa",
-                "desc_trat_enf_diabetes","desc_trat_hta_previa","desc_trat_enf_cardiovascular","desc_trat_enf_dislipemia",
-                "desc_trat_enf_renal",
+                "desc_trat_enf_cardiovascular","desc_trat_enf_dislipemia","desc_trat_enf_renal",
+                "desc_trat_enf_diabetes","desc_trat_hta_previa",
                 "otros","last_modified","sql_deleted"
         ));
         put("lab_tipos", List.of(
@@ -284,6 +306,7 @@ public class SyncController {
         }
 
         int applied = 0, skipped = 0;
+        List<Map<String, Object>> warnings = new ArrayList<>();
 
         // Para cascada targeteada: viviendas/personas que quedaron con sql_deleted=1 tras este push
         final Set<String> viviendasMarcadasBaja = new HashSet<>();
@@ -298,10 +321,29 @@ public class SyncController {
             List<String> pkCols = pkFor(table);
 
             for (List<Object> rowArr : incoming.get(table)) {
-                Map<String, Object> row = zipRow(cols, rowArr);
+                List<String> rowCols = cols;
+                if ("viviendas".equals(table) && rowArr.size() == VIVIENDAS_LEGACY_COLS.size()) {
+                    rowCols = VIVIENDAS_LEGACY_COLS;
+                }
+
+                if (rowArr.size() != rowCols.size()) {
+                    skipped++;
+                    Map<String, Object> warning = new LinkedHashMap<>();
+                    warning.put("table", table);
+                    warning.put("expected", cols.size());
+                    warning.put("received", rowArr.size());
+                    warning.put("message", "Fila salteada por cantidad de valores incompatible con MOBILE_COLS");
+                    warnings.add(warning);
+                    log.warn("Sync push: fila salteada en {} por cantidad de valores incompatible. Esperados={}, recibidos={}",
+                            table, cols.size(), rowArr.size());
+                    continue;
+                }
+
+                Map<String, Object> row = zipRow(rowCols, rowArr);
+                try {
 
                 // Normalizaciones
-                for (String c : cols) {
+                for (String c : rowCols) {
                     Object v = row.get(c);
                     if (v instanceof Boolean b) row.put(c, b ? 1 : 0);
                     if (LM.equalsIgnoreCase(c)) row.put(c, toEpochSeconds(v));
@@ -361,6 +403,10 @@ public class SyncController {
                         controlesConsultorioMarcadosBaja.add(String.valueOf(id));
                     }
                 }
+                } catch (Exception e) {
+                    Object pkValue = row.get(pkCols.get(0));
+                    throw new IllegalStateException(buildPushErrorMessage(table, pkValue, e), e);
+                }
             }
         }
 
@@ -380,19 +426,53 @@ public class SyncController {
             ccCascade.forEach((k, v) -> cascaded.merge(k, v, Integer::sum));
         }
 
-        return ResponseEntity.ok(Map.of(
-                "applied", applied,
-                "skipped", skipped,
-                "cascade_soft_deleted", cascaded,
-                "personas_borradas", personasMarcadasBaja.size(),
-                "viviendas_borradas", viviendasMarcadasBaja.size(),
-                "controles_consultorio_borrados", controlesConsultorioMarcadosBaja.size()
-        ));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("applied", applied);
+        response.put("skipped", skipped);
+        response.put("cascade_soft_deleted", cascaded);
+        response.put("personas_borradas", personasMarcadasBaja.size());
+        response.put("viviendas_borradas", viviendasMarcadasBaja.size());
+        response.put("controles_consultorio_borrados", controlesConsultorioMarcadosBaja.size());
+        if (!warnings.isEmpty()) response.put("warnings", warnings);
+        return ResponseEntity.ok(response);
     }
 
     /* ===== Helpers específicos de este push ===== */
 
     private long nowSec() { return Instant.now().getEpochSecond(); }
+
+    private String buildPushErrorMessage(String table, Object pkValue, Exception e) {
+        Throwable root = rootCause(e);
+        String detail = root == null ? e.getMessage() : root.getMessage();
+        String column = inferSqlColumn(detail);
+        StringBuilder message = new StringBuilder("Error sincronizando push");
+        message.append(" tabla=").append(table);
+        if (pkValue != null) message.append(" pk=").append(pkValue);
+        if (column != null) message.append(" columna=").append(column);
+        if (detail != null && !detail.isBlank()) {
+            message.append(": ").append(detail);
+        }
+        return message.toString();
+    }
+
+    private Throwable rootCause(Throwable e) {
+        Throwable current = e;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private String inferSqlColumn(String message) {
+        if (message == null) return null;
+        String marker = "column '";
+        int start = message.indexOf(marker);
+        if (start < 0) return null;
+        start += marker.length();
+        int end = message.indexOf("'", start);
+        if (end <= start) return null;
+        return message.substring(start, end);
+    }
 
     /**
      * Propaga sql_deleted = 1 desde PERSONAS a TODAS las tablas hijas/nietas,
@@ -598,6 +678,10 @@ public class SyncController {
                         col("direccion","TEXT"),
                         col("last_modified","INTEGER NOT NULL"),
                         col("sql_deleted",    bool0("sql_deleted")),
+                        col("gps_accuracy","REAL"),
+                        col("gps_captured_at","INTEGER"),
+                        col("ubicacion_fuente","TEXT"),
+                        col("confianza_dato","TEXT"),
                         fk("barrios_id","REFERENCES barrios(id) ON DELETE SET NULL"),
                         fk("caps_id","REFERENCES caps(id) ON DELETE SET NULL")
                 ),
@@ -608,10 +692,7 @@ public class SyncController {
                         idx("idx_viviendas_caps","caps_id")
                 ),
                 null,
-                selectValuesSec("viviendas", List.of(
-                        "id","barrios_id","caps_id","fecha","accedio","motivo","casa","manzana",
-                        "latitud","longitud","direccion","last_modified","sql_deleted"
-                ))
+                selectValuesSec("viviendas", VIVIENDAS_COLS)
         ));
 
 
@@ -1138,6 +1219,28 @@ public class SyncController {
         try (Connection c = Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
             DatabaseMetaData md = c.getMetaData();
             try (ResultSet rs = md.getTables(c.getCatalog(), null, table, null)) {
+                return rs.next();
+            }
+        }
+    }
+
+    private void ensureViviendasQualityColumns() throws SQLException {
+        if (!tableExists("viviendas")) return;
+        addColumnIfMissing("viviendas", "gps_accuracy", "DOUBLE NULL");
+        addColumnIfMissing("viviendas", "gps_captured_at", "BIGINT NULL");
+        addColumnIfMissing("viviendas", "ubicacion_fuente", "VARCHAR(20) NULL");
+        addColumnIfMissing("viviendas", "confianza_dato", "VARCHAR(20) NULL");
+    }
+
+    private void addColumnIfMissing(String table, String column, String definition) throws SQLException {
+        if (columnExists(table, column)) return;
+        jdbc.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+    }
+
+    private boolean columnExists(String table, String column) throws SQLException {
+        try (Connection c = Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
+            DatabaseMetaData md = c.getMetaData();
+            try (ResultSet rs = md.getColumns(c.getCatalog(), null, table, column)) {
                 return rs.next();
             }
         }

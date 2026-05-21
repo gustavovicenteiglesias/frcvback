@@ -31,6 +31,18 @@ public class Viviendas extends BaseEntity{
     private String manzana;
     private String casa;
 
+    @Column(name = "gps_accuracy")
+    private Double gpsAccuracy;
+
+    @Column(name = "gps_captured_at")
+    private Long gpsCapturedAt;
+
+    @Column(name = "ubicacion_fuente", length = 20)
+    private String ubicacionFuente;
+
+    @Column(name = "confianza_dato", length = 20)
+    private String confianzaDato;
+
     @Column(name="accedio", columnDefinition = "TINYINT(1)")
     private Boolean accedio;
 

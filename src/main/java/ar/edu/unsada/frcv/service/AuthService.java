@@ -1,9 +1,6 @@
 package ar.edu.unsada.frcv.service;
 
-import ar.edu.unsada.frcv.models.RoleEntity;
 import ar.edu.unsada.frcv.models.UserEntity;
-import ar.edu.unsada.frcv.models.UserRoleEntity;
-import ar.edu.unsada.frcv.repository.RoleRepo;
 import ar.edu.unsada.frcv.repository.UserRepo;
 import ar.edu.unsada.frcv.repository.UserRoleRepo;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
@@ -12,19 +9,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class AuthService {
 
     private final UserRepo userRepo;
-    private final RoleRepo roleRepo;
     private final UserRoleRepo userRoleRepo;
     private final JwtService jwtService;
 
-    public AuthService(UserRepo userRepo, RoleRepo roleRepo, UserRoleRepo userRoleRepo, JwtService jwtService) {
+    public AuthService(UserRepo userRepo, UserRoleRepo userRoleRepo, JwtService jwtService) {
         this.userRepo = userRepo;
-        this.roleRepo = roleRepo;
         this.userRoleRepo = userRoleRepo;
         this.jwtService = jwtService;
     }
@@ -51,17 +49,6 @@ public class AuthService {
                 });
 
         List<String> roles = userRoleRepo.findRoleCodesByUserId(user.getId());
-        if (roles.isEmpty()) {
-            RoleEntity enfermero = roleRepo.findByCode("ENFERMERO")
-                    .orElseThrow(() -> new IllegalStateException("Rol ENFERMERO no está seedado"));
-            UserRoleEntity ur = new UserRoleEntity();
-            ur.setId(UUID.randomUUID().toString());
-            ur.setUserId(user.getId());
-            ur.setRoleId(enfermero.getId());
-            ur.setLastModified(Instant.now().getEpochSecond());
-            userRoleRepo.save(ur);
-            roles = List.of("ENFERMERO");
-        }
 
         user.setUltimoLogin(LocalDateTime.now());
         user.setLastModified(Instant.now().getEpochSecond());
@@ -76,9 +63,7 @@ public class AuthService {
         resp.put("name",user.getNombre());
         resp.put("picture",user.getFotoUrl());
         resp.put("roles", roles);
-        // Podés decodificar el exp del JWT si querés; acá lo aproximamos:
         resp.put("exp", Instant.now().plusSeconds(28800).getEpochSecond());
         return resp;
     }
 }
-

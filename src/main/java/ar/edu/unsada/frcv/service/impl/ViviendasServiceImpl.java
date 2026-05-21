@@ -66,6 +66,10 @@ public class ViviendasServiceImpl implements ViviendasService {
         db.setDireccion(v.getDireccion());
         db.setManzana(v.getManzana());
         db.setCasa(v.getCasa());
+        db.setGpsAccuracy(v.getGpsAccuracy());
+        db.setGpsCapturedAt(v.getGpsCapturedAt());
+        db.setUbicacionFuente(v.getUbicacionFuente());
+        db.setConfianzaDato(v.getConfianzaDato());
         db.setAccedio(v.getAccedio());
         db.setMotivo(v.getMotivo());
         db.setLastModified(Instant.now().toEpochMilli());

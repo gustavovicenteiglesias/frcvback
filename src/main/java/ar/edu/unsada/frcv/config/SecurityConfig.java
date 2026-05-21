@@ -47,11 +47,11 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/auth/google",
                                 "/actuator/health",
-                                "/ping",
-                                "/api/**"
+                                "/ping"
                                 // si usás OpenAPI/Swagger, abrí también:
                                 // "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers("/api/**").hasAnyRole("ADMIN", "MEDICO", "ENFERMERO")
                         .anyRequest().authenticated()
                 )
 
