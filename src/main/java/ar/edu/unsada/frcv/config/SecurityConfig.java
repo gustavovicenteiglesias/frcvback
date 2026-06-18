@@ -51,6 +51,7 @@ public class SecurityConfig {
                                 // si usás OpenAPI/Swagger, abrí también:
                                 // "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers("/api/sync/pull-full").hasAnyRole("ADMIN", "MEDICO", "ENFERMERO", "EPIDEMIOLOGO")
                         .requestMatchers("/api/**").hasAnyRole("ADMIN", "MEDICO", "ENFERMERO")
                         .anyRequest().authenticated()
                 )
